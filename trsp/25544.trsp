@@ -1,0 +1,58 @@
+[
+    {
+        "name": "V/V AFSK Packet",
+        "mode": "DIGI",
+        "down": 145800000,
+        "up"  : 145990000,
+        "invert": false,
+        "pl" : null
+    },
+    {
+        "name": "V/U FM Voice",
+        "mode": "FM",
+        "down": 437800000,
+        "up"  : 145800000,
+        "invert": false,
+        "pl" : null
+    },
+    {
+        "name": "V APRS",
+        "mode": "FM",
+        "down": 145825000,
+        "up"  : 145825000,
+        "invert": false,
+        "pl" : null
+    },
+    {
+        "name": "SSTV in FM carrier",
+        "mode": "FM",
+        "down": 145800000,
+        "up"  : null,
+        "invert": false,
+        "pl" : null
+    },
+    {
+        "name": "U/V FM Voice",
+        "mode": "FM",
+        "down": 145800000,
+        "up"  : 437800000,
+        "invert": false,
+        "pl" : null
+    },
+    {
+        "name": "V/V FM (crew R2+3)",
+        "mode": "FM",
+        "down": 145800000,
+        "up"  : 144490000,
+        "invert": false,
+        "pl" : null
+    },
+    {
+        "name": "V/V FM (crew R1)",
+        "mode": "FM",
+        "down": 145800000,
+        "up"  : 145200000,
+        "invert": false,
+        "pl" : null
+    }
+]

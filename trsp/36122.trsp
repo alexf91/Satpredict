@@ -1,0 +1,34 @@
+[
+    {
+        "name": "CW Beacon",
+        "mode": "CW",
+        "down": 435790000,
+        "up"  : null,
+        "invert": false,
+        "pl" : null
+    },
+    {
+        "name": "V/U FM",
+        "mode": "FM",
+        "down": 435675000,
+        "up"  : 145825000,
+        "invert": false,
+        "pl" : 67.0
+    },
+    {
+        "name": "V/U Linear",
+        "mode": "LINEAR",
+        "down": [435715000, 435765000],
+        "up"  : [145925000, 145975000],
+        "invert": true,
+        "pl" : null
+    },
+    {
+        "name": "V/U BBS AFSK",
+        "mode": "DIGI",
+        "down": 145825000,
+        "up"  : 145825000,
+        "invert": false,
+        "pl" : null
+    }
+]

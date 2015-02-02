@@ -1,0 +1,10 @@
+[
+    {
+        "name": "V/U FM Voice",
+        "mode": "FM",
+        "down": 436795000,
+        "up"  : 145850000,
+        "invert": false,
+        "pl" : 67.0
+    }
+]
