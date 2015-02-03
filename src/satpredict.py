@@ -2,6 +2,7 @@ import os
 import configuration
 from satpredict_app import *
 import tkinter as tk
+import subprocess
 
 def setup_directories():
     os.makedirs(os.path.expanduser('~/.satpredict'), exist_ok=True)
@@ -17,6 +18,10 @@ def main():
     app.resizable(False, False)
     app.geometry('320x210')
     
+    if 'RASPBERRY_PI' in os.environ:
+        app.update()
+        subprocess.call(['xwit', '-warp', '0', '0'])
+        
     app.mainloop()
 
 

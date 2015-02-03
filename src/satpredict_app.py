@@ -1,6 +1,9 @@
 import tkinter as tk
 import os
 import subprocess
+import configuration
+import database
+import copy
 
 class SatPredictApp(tk.Tk):
     
@@ -8,7 +11,10 @@ class SatPredictApp(tk.Tk):
         tk.Tk.__init__(self, parent)
         self.parent = parent
         
-        self.state = SatPredictState()
+        self.cfg = configuration.Configuration(os.path.expanduser('~/.satpredict/amateur.conf'))
+        self.db = database.Database()
+        self.active_sat = None
+        self.active_trsp = None
         
         self.initialize_gui()
 
@@ -17,22 +23,22 @@ class SatPredictApp(tk.Tk):
         self.polar = PolarMap(self)
         self.polar.focus()
         
-        menubar = tk.Menu(self)
+        menubar = tk.Menu(self, activebackground='#F00000')
         
         track_menu = tk.Menu(menubar, tearoff=0, activebackground='#F00000')
         track_menu.add_command(label='Satellite Info')
         track_menu.add_separator()
         
-        self.sat_menu = tk.Menu(track_menu, activebackground='#F00000', tearoff=0, postcommand=self.satellite_cb)
+        self.sat_menu = tk.Menu(track_menu, activebackground='#F00000', tearoff=0, postcommand=self.satellite_dir_cb)
         track_menu.add_cascade(label='Satellite', menu=self.sat_menu)
         
         
-        self.trsp_menu = tk.Menu(track_menu, activebackground='#F00000', tearoff=0, postcommand=self.trsp_cb)
+        self.trsp_menu = tk.Menu(track_menu, activebackground='#F00000', tearoff=0, postcommand=self.transponder_dir_cb)
         self.trsp_menu.add_command(label='FM')
         track_menu.add_cascade(label='Transponder', menu=self.trsp_menu)
         
-        self.pos_menu = tk.Menu(track_menu, activebackground='#F00000', tearoff=0, postcommand=self.pos_cb)
-        track_menu.add_cascade(label='Position', menu=self.pos_menu)
+        self.loc_menu = tk.Menu(track_menu, activebackground='#F00000', tearoff=0, postcommand=self.location_dir_cb)
+        track_menu.add_cascade(label='Location', menu=self.loc_menu)
         
         menubar.add_cascade(label='Tracking', menu=track_menu)
         
@@ -45,31 +51,56 @@ class SatPredictApp(tk.Tk):
         
         self.menubar = menubar
         
-        
-        
         self.config(menu=menubar)
         self.grid()
         
         self.bind('<Escape>', self.escape_cb)
-        self.bind('<Return>', self.return_cb)            
+    
     
     def escape_cb(self, event):
         self.event_generate('<F10>')
-
-    def return_cb(self, event):
-        print('return_cb()')
     
-    def satellite_cb(self):
-        print('satellite_cb()')
+    
+    def satellite_dir_cb(self):
         self.sat_menu.delete(0, tk.END)
-        for entry in ['SO-50', 'AO-7', 'FUNCUBE']:
-            self.sat_menu.add_command(label=entry)
+        
+        for sat in self.db.query(self.cfg.satellites):            
+            if sat.nick != '':
+                entry = '{} ({})'.format(sat.name, sat.nick)
+            else:
+                entry = sat.name
+                
+            def make_lambda(sat):
+                return lambda: self.satellite_select_cb(sat)
+            self.sat_menu.add_command(label=entry, command=make_lambda(sat))
+
+            
     
-    def trsp_cb(self):
-        print('trsp_cb()')
+    def satellite_select_cb(self, sat):
+        self.active_sat = sat
+
     
-    def pos_cb(self):
+    def transponder_dir_cb(self):
+        self.trsp_menu.delete(0, tk.END)
+        
+        if not self.active_sat:
+            return
+        
+        for trsp in self.active_sat.transponders:
+            def make_lambda(trsp):
+                return lambda: self.transponder_select_cb(trsp)
+            
+            self.trsp_menu.add_command(label=trsp.name, command=make_lambda(trsp))
+            
+            
+    
+    def transponder_select_cb(self, trsp):
+        self.active_trsp = trsp
+    
+    
+    def location_dir_cb(self):
         print('pos_cb()')
+    
     
     def power_cb(self, cmd):
         if 'RASPBERRY_PI' in os.environ:
@@ -87,10 +118,54 @@ class PolarMap(tk.Frame):
         tk.Frame.__init__(self, parent)
         self.parent = parent
         
-        self.map = tk.Canvas(width=210, height=210, bg='white')
+        self.map = tk.Canvas(self, width=210, height=210, bg='white')
         self.draw_outline()
-        self.map.focus()
-        self.map.grid()
+        self.map.grid(column=0, row=0, columnspan=8, rowspan=8)
+        
+        self.sat_name = tk.StringVar(value='')
+        self.trsp_name = tk.StringVar(value='')
+        self.up_sat = tk.StringVar(value='')
+        self.down_sat = tk.StringVar(value='')
+        self.up_doppler = tk.StringVar(value='')
+        self.down_doppler = tk.StringVar(value='')
+        
+        font = lambda s: ('Monospace', s)
+        color = 'black'
+        
+        self.label = tk.Label(self, textvar = self.sat_name, fg=color, font=font(9))
+        self.label.grid(column=10, row=0)
+        self.label = tk.Label(self, textvar = self.trsp_name, fg=color, font=font(9))
+        self.label.grid(column=10, row=1)
+        
+        self.label = tk.Label(self, text='⇧', fg=color, font=font(16))
+        self.label.grid(column=9, row=2, sticky=tk.W)
+        
+        self.label = tk.Label(self, text='⇩', fg=color, font=font(16))
+        self.label.grid(column=9, row=3, sticky=tk.W) 
+        
+        self.label = tk.Label(self, textvar=self.up_sat, fg=color, font=font(16))
+        self.label.grid(column=10, row=2)
+        
+        self.label = tk.Label(self, textvar=self.down_sat, fg=color, font=font(16))
+        self.label.grid(column=10, row=3)
+        
+        self.label = tk.Label(self, text='Doppler:', fg=color, font=font(10))
+        self.label.grid(column=10, row=4)
+        
+        self.label = tk.Label(self, text='⇧', fg=color, font=font(16))
+        self.label.grid(column=9, row=5, sticky=tk.W)
+        
+        self.label = tk.Label(self, text='⇩', fg=color, font=font(16))
+        self.label.grid(column=9, row=6, sticky=tk.W) 
+        
+        self.label = tk.Label(self, textvar=self.up_doppler, fg=color, font=font(16))
+        self.label.grid(column=10, row=5)
+        
+        self.label = tk.Label(self, textvar=self.down_doppler, fg=color, font=font(16))
+        self.label.grid(column=10, row=6)
+        
+        
+        self.grid()
     
     
     def draw_outline(self):
@@ -112,10 +187,4 @@ class PolarMap(tk.Frame):
         self.map.create_text(10, size_y/2 -7, text='W')
         self.map.create_text(size_x-10, size_y/2 -7, text='E')
 
-
-class SatPredictState(object):
-    active_sat = None
-    db = None
-    location = None
-    
     

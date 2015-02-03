@@ -18,7 +18,7 @@ class Database(object):
     Database containing satellite orbit- and transponder information
     '''
 
-    def __init__(self, satDirectory=os.path.expanduser('~/.sattrack/sats'), trspDirectory=os.path.expanduser('~/.sattrack/trsp')):
+    def __init__(self, satDirectory=os.path.expanduser('~/.satpredict/sats'), trspDirectory=os.path.expanduser('~/.satpredict/trsp')):
         '''
         Constructor
         '''
@@ -51,7 +51,7 @@ class Database(object):
                 fd = open(path, 'r')
                 sat = SatelliteEntry.fromJson(json.load(fd))
                 sats.append(sat)
-        
+
         return sats
 
 
