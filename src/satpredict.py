@@ -1,19 +1,19 @@
 import os
 import configuration
+from satpredict_app import *
 
-
-def setupDirectories():
-    os.makedirs(os.path.expanduser('~/.sattrack'), exist_ok=True)
-    os.makedirs(os.path.expanduser('~/.sattrack/sats'), exist_ok=True)
-    os.makedirs(os.path.expanduser('~/.sattrack/trsp'), exist_ok=True)
+def setup_directories():
+    os.makedirs(os.path.expanduser('~/.satpredict'), exist_ok=True)
+    os.makedirs(os.path.expanduser('~/.satpredict/sats'), exist_ok=True)
+    os.makedirs(os.path.expanduser('~/.satpredict/trsp'), exist_ok=True)
 
 
 def main():
-    setupDirectories()
+    setup_directories()
+    app = SatPredictApp()
+
     
-
-
-
+    app.mainloop()
 
 
 
