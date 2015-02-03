@@ -1,0 +1,10 @@
+[Unit]
+Description=Start pikeyd daemon and configure GPIOs
+ 
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/gpio_kb.sh
+ 
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,8 @@
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin alex --noclear %I 38400 linux
+
+[Install]
+WantedBy=multi-user.target
+
+
