@@ -1,8 +1,8 @@
 import os
-import configuration
 from satpredict_app import *
 import tkinter as tk
 import subprocess
+import fileaccess
 
 def setup_directories():
     os.makedirs(os.path.expanduser('~/.satpredict'), exist_ok=True)

@@ -1,3 +1,3 @@
 #!/bin/sh
 
-scp -r src/*.py alex@$RPI_IP:~/satpredict/
+scp -r src/*.py $RPI_IP:~/satpredict/

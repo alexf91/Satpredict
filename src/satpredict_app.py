@@ -1,9 +1,10 @@
 import tkinter as tk
 import os
 import subprocess
-import configuration
-import database
+import fileaccess
 import copy
+import time
+import math
 
 class SatPredictApp(tk.Tk):
     
@@ -11,13 +12,20 @@ class SatPredictApp(tk.Tk):
         tk.Tk.__init__(self, parent)
         self.parent = parent
         
-        self.cfg = configuration.Configuration(os.path.expanduser('~/.satpredict/amateur.conf'))
-        self.db = database.Database()
-        self.active_sat = None
-        self.active_trsp = None
+        self.cfg = fileaccess.Configuration(os.path.expanduser('~/.satpredict/default.conf'))
+        self.db = fileaccess.Database()
+        self.active_sat = self.db.query(self.cfg.satellites)[0]
+        if len(self.active_sat.transponders) > 0:
+            self.active_trsp = self.active_sat.transponders[0]
+        else:
+            self.active_trsp = None
+        
+        self.active_location = None
         
         self.initialize_gui()
-
+        
+        self.display_timer_interval = 250
+        self.display_timer()
     
     def initialize_gui(self):
         self.polar = PolarMap(self)
@@ -55,10 +63,37 @@ class SatPredictApp(tk.Tk):
         self.grid()
         
         self.bind('<Escape>', self.escape_cb)
+        
+        self.polar.update_satpos(180, 80)
+    
+    
+    def display_timer(self):
+        
+        t = time.strftime('%H:%M:%S')
+        self.polar.time.set(t)
+        
+        if self.active_sat.nick != '':
+            name = self.active_sat.nick
+        else:
+            name = self.active_sat.name
+        
+        self.polar.sat_name.set(name)
+        
+        if self.active_trsp:
+            name = self.active_trsp.name
+        else:
+            name = 'No Transponder'
+            
+        self.polar.trsp_name.set(name)
+        
+        self.after(self.display_timer_interval, self.display_timer)
+    
     
     
     def escape_cb(self, event):
         self.event_generate('<F10>')
+    
+    
     
     
     def satellite_dir_cb(self):
@@ -78,6 +113,12 @@ class SatPredictApp(tk.Tk):
     
     def satellite_select_cb(self, sat):
         self.active_sat = sat
+        if len(sat.transponders) > 0:
+            self.active_trsp = sat.transponders[0]
+        else:
+            self.active_trsp = None
+
+
 
     
     def transponder_dir_cb(self):
@@ -99,7 +140,16 @@ class SatPredictApp(tk.Tk):
     
     
     def location_dir_cb(self):
-        print('pos_cb()')
+        self.loc_menu.delete(0, tk.END)
+        
+        for loc in self.cfg.locations:
+            def make_lambda(loc):
+                return lambda: self.location_select_cb(loc)
+            
+            self.loc_menu.add_command(label=loc.name, command=make_lambda(loc))
+            
+    def location_select_cb(self, loc):
+        self.active_location = loc
     
     
     def power_cb(self, cmd):
@@ -112,6 +162,8 @@ class SatPredictApp(tk.Tk):
                 exit()
         else:
             exit()
+        
+        
         
 class PolarMap(tk.Frame):    
     def __init__(self, parent):
@@ -128,20 +180,22 @@ class PolarMap(tk.Frame):
         self.down_sat = tk.StringVar(value='')
         self.up_doppler = tk.StringVar(value='')
         self.down_doppler = tk.StringVar(value='')
+        self.time = tk.StringVar(value='')
         
         font = lambda s: ('Monospace', s)
         color = 'black'
         
-        self.label = tk.Label(self, textvar = self.sat_name, fg=color, font=font(9))
-        self.label.grid(column=10, row=0)
-        self.label = tk.Label(self, textvar = self.trsp_name, fg=color, font=font(9))
-        self.label.grid(column=10, row=1)
+        self.label = tk.Label(self, textvar = self.sat_name, fg=color, font=font(8))
+        self.label.grid(column=9, row=0, sticky=tk.W, columnspan=2)
+        
+        self.label = tk.Label(self, textvar = self.trsp_name, fg=color, font=font(8))
+        self.label.grid(column=9, row=1, sticky=tk.W, columnspan=2)
         
         self.label = tk.Label(self, text='⇧', fg=color, font=font(16))
-        self.label.grid(column=9, row=2, sticky=tk.W)
+        self.label.grid(column=9, row=2, sticky=tk.W, columnspan=2)
         
         self.label = tk.Label(self, text='⇩', fg=color, font=font(16))
-        self.label.grid(column=9, row=3, sticky=tk.W) 
+        self.label.grid(column=9, row=3, sticky=tk.W, columnspan=2) 
         
         self.label = tk.Label(self, textvar=self.up_sat, fg=color, font=font(16))
         self.label.grid(column=10, row=2)
@@ -149,14 +203,14 @@ class PolarMap(tk.Frame):
         self.label = tk.Label(self, textvar=self.down_sat, fg=color, font=font(16))
         self.label.grid(column=10, row=3)
         
-        self.label = tk.Label(self, text='Doppler:', fg=color, font=font(10))
-        self.label.grid(column=10, row=4)
+        self.label = tk.Label(self, text='Doppler:', fg=color, font=font(8))
+        self.label.grid(column=9, row=4, sticky=tk.W, columnspan=2)
         
         self.label = tk.Label(self, text='⇧', fg=color, font=font(16))
-        self.label.grid(column=9, row=5, sticky=tk.W)
+        self.label.grid(column=9, row=5, sticky=tk.W, columnspan=2)
         
         self.label = tk.Label(self, text='⇩', fg=color, font=font(16))
-        self.label.grid(column=9, row=6, sticky=tk.W) 
+        self.label.grid(column=9, row=6, sticky=tk.W, columnspan=2) 
         
         self.label = tk.Label(self, textvar=self.up_doppler, fg=color, font=font(16))
         self.label.grid(column=10, row=5)
@@ -164,7 +218,14 @@ class PolarMap(tk.Frame):
         self.label = tk.Label(self, textvar=self.down_doppler, fg=color, font=font(16))
         self.label.grid(column=10, row=6)
         
+        self.label = tk.Label(self, textvar=self.time, fg=color, font=font(8))
+        self.label.grid(column=9, row=7, sticky=tk.W, columnspan=2)
         
+        #add dot for satellite tracking
+        r = 3
+        self.dot_radius = r
+        self.sat_dot = self.map.create_oval(105-r, 105-r, 105+r, 105+r, fill='#000000')
+        self.ant_dot = self.map.create_oval(105-r, 105-r, 105+r, 105+r, fill='#FF0000')
         self.grid()
     
     
@@ -186,5 +247,31 @@ class PolarMap(tk.Frame):
         self.map.create_text(size_x/2 + 7, size_y - 10, text='S')
         self.map.create_text(10, size_y/2 -7, text='W')
         self.map.create_text(size_x-10, size_y/2 -7, text='E')
-
+        
     
+    def update_satpos(self, az, el):
+        self.__update_dotpos(az, el, self.sat_dot, 'black')
+        
+    def update_antpos(self, az, el):
+        self.__update_dotpos(az, el, self.ant_dot, 'green')
+        
+        
+    def __update_dotpos(self, az, el, dot, color):
+        
+        az = az - 180
+        r_unity = abs(math.cos(math.radians(el)))
+        z = math.sin(math.radians(el))
+        
+        y = 105 - self.dot_radius + 105 * math.cos(math.radians(az)) * r_unity
+        x = 105 - self.dot_radius + 105 * math.sin(math.radians(az)) * r_unity
+        
+        pos = self.map.coords(dot)
+
+        dx = x - pos[0]
+        dy = y - pos[1]
+        
+        self.map.move(self.sat_dot, dx, dy)
+        if z < 0:
+            self.map.itemconfig(self.sat_dot, fill='')
+        else:
+            self.map.itemconfig(self.sat_dot, fill=color)

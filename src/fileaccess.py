@@ -11,6 +11,8 @@ class ExtendedEncoder(json.JSONEncoder):
             return o.__dict__()
         elif isinstance(o, Transponder.Mode):
             return o.name
+        elif isinstance(o, Location):
+            return o.__dict__()
         return json.JSONEncoder.default(self, o)
 
 class Database(object):
@@ -232,4 +234,54 @@ class Transponder(object):
                 'pl'    : self.pl}
 
 
+
+
+class Configuration(object):
+    '''
+    Global configuration of the program
+    '''
+
+
+    def __init__(self, path):
+        '''
+        Creates a configuration object from the config file
+        at path or creates a new one with default values.
+        '''
+        
+        #File exists, read configuration
+        if os.path.isfile(path):
+            fp = open(path)
+            conf = json.load(fp)
+            self.name = conf['name']
+            self.satellites = list(conf['satellites'])
+            self.locations = list()
+            for loc in conf['locations']:
+                name = loc['name']
+                long = loc['longitude']
+                lat =  loc['latitude']
+                elev = loc['elevation']
+                
+                self.locations.append(Location(name, long, lat, elev))
+            
+        else:
+            self.name = 'default'
+            self.satellites = [24278, 7530, 25544, 39444, 27607, 36122]
+            self.locations = [Location('JN68WN', 13.905278, 48.547222, 550)]
+            
+            json.dump(self.__dict__(), open(path, 'w'), sort_keys=True, indent=4, separators=(',', ': '), cls=ExtendedEncoder)
+            
+    
+    def __dict__(self):
+        return {'name':self.name, 'satellites':self.satellites, 'locations':self.locations}
+    
+
+class Location(object):
+    def __init__(self,name, long, lat, elev):
+        self.name = name
+        self.long = long
+        self.lat = lat
+        self.elev = elev
+    
+    def __dict__(self):
+        return {'name':self.name, 'longitude':self.long, 'latitude':self.lat, 'elevation':self.elev}
         
