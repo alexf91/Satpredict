@@ -5,6 +5,7 @@ import fileaccess
 import copy
 import time
 import math
+import ephem
 
 class SatPredictApp(tk.Tk):
     
@@ -20,11 +21,11 @@ class SatPredictApp(tk.Tk):
         else:
             self.active_trsp = None
         
-        self.active_location = None
+        self.active_location = self.cfg.locations[0]
         
         self.initialize_gui()
         
-        self.display_timer_interval = 250
+        self.display_timer_interval = 500
         self.display_timer()
     
     def initialize_gui(self):
@@ -64,14 +65,15 @@ class SatPredictApp(tk.Tk):
         
         self.bind('<Escape>', self.escape_cb)
         
-        self.polar.update_satpos(180, 80)
+        self.az = 0
     
     
     def display_timer(self):
-        
+        #Display UTC on screen
         t = time.strftime('%H:%M:%S')
         self.polar.time.set(t)
         
+        #Display satellite name
         if self.active_sat.nick != '':
             name = self.active_sat.nick
         else:
@@ -79,13 +81,30 @@ class SatPredictApp(tk.Tk):
         
         self.polar.sat_name.set(name)
         
+        #display transponder name
         if self.active_trsp:
             name = self.active_trsp.name
         else:
             name = 'No Transponder'
-            
+        
         self.polar.trsp_name.set(name)
         
+        #Calcualte position of current satellite
+        lon = self.active_location.long
+        lat = self.active_location.lat
+        obs = ephem.Observer()
+        obs.lon = '{}:{}:{}'.format(lon[0], lon[1], lon[2])
+        obs.lat = '{}:{}:{}'.format(lat[0], lat[1], lat[2])
+        obs.elevation = self.active_location.elev
+        
+        body = ephem.readtle(self.active_sat.line1, self.active_sat.line2, self.active_sat.line3)
+        body.compute(obs)
+        
+        az = math.degrees(body.az)
+        el = math.degrees(body.alt)
+        self.polar.update_satpos(az, el)
+        
+        #restart timer for next event
         self.after(self.display_timer_interval, self.display_timer)
     
     
@@ -258,12 +277,14 @@ class PolarMap(tk.Frame):
         
     def __update_dotpos(self, az, el, dot, color):
         
-        az = az - 180
-        r_unity = abs(math.cos(math.radians(el)))
+        az = -az + 180
+        
+        #not mathematically correct, but the same as in gpredict
+        r_unity = (90 - abs(el)) / 90#abs(math.cos(math.radians(el)))
         z = math.sin(math.radians(el))
         
-        y = 105 - self.dot_radius + 105 * math.cos(math.radians(az)) * r_unity
-        x = 105 - self.dot_radius + 105 * math.sin(math.radians(az)) * r_unity
+        y = round(105 - self.dot_radius + 105 * math.cos(math.radians(az)) * r_unity)
+        x = round(105 - self.dot_radius + 105 * math.sin(math.radians(az)) * r_unity)
         
         pos = self.map.coords(dot)
 
