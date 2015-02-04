@@ -22,6 +22,7 @@ class SatPredictApp(tk.Tk):
             self.active_trsp = None
         
         self.active_location = self.cfg.locations[0]
+        self.gyro = None
         
         self.initialize_gui()
         
@@ -52,11 +53,19 @@ class SatPredictApp(tk.Tk):
         menubar.add_cascade(label='Tracking', menu=track_menu)
         
         
+        self.device_menu = tk.Menu(menubar, tearoff=0, activebackground='#F00000', postcommand=self.devices_dir_cb)
+        self.device_menu.add_command(label='Enable CAT')
+        
+        state = tk.ACTIVE if 'RASPBERRY_PI' in os.environ else tk.DISABLED 
+        self.device_menu.add_command(label='Enable sensors', command=self.gyro_cb, state=state)
+        menubar.add_cascade(label='Devices', menu=self.device_menu)
+        
         power_menu = tk.Menu(menubar, tearoff=0, activebackground='#F00000')
         power_menu.add_command(label='Exit', command=lambda: self.power_cb('EXIT'))
         power_menu.add_command(label='Reboot', command=lambda: self.power_cb('REBOOT'))
         power_menu.add_command(label='Shutdown', command=lambda: self.power_cb('SHUTDOWN'))
         menubar.add_cascade(label='Power', menu=power_menu)
+        
         
         self.menubar = menubar
         
@@ -112,7 +121,22 @@ class SatPredictApp(tk.Tk):
     def escape_cb(self, event):
         self.event_generate('<F10>')
     
+    def devices_dir_cb(self):
+        #CAT
+        label = 'Enable CAT'
+        self.device_menu.entryconfig(0, label=label)
+        
+        #sensors
+        label = 'Enable sensors' if self.gyro == None else 'Disable sensors'
+        self.device_menu.entryconfig(1, label=label)
     
+    
+    def gyro_cb(self):
+        if self.gyro == None:
+            self.gyro = 10
+        else:
+            self.gyro = None
+            
     
     
     def satellite_dir_cb(self):
