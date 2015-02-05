@@ -11,7 +11,7 @@ class HMC5883L(object):
     Class for the HMC5883L Magnetic sensor using smbus
     '''
 
-    def __init__(self, bus=1, address=0x1E, gain=7):
+    def __init__(self, bus=1, address=0x1E, gain=2):
         self.bus = smbus.SMBus(bus)
         self.address = address
         self.x_off = 0
@@ -43,25 +43,14 @@ class HMC5883L(object):
         return val
 
     def calibrate(self):
-        #Positive bias configuration
-        self.bus.write_byte_data(self.address, 0x00, 0x71)
-        time.sleep(0.2)
-        (x_pos, y_pos, z_pos) = self.axes_raw()
+        #values determined by matlab script
+        self.y_scale = 0.97
+        self.x_off = 28
+        self.y_off = -33
         
-        #Negative bias configuration
-        self.bus.write_byte_data(self.address, 0x00, 0x72)
-        time.sleep(0.2)
-        (x_neg, y_neg, z_neg) = self.axes_raw()
-        
-        self.x_off = x_pos + x_neg
-        self.y_off = y_pos + y_neg
-        self.z_off = z_pos + z_neg
-        
-        self.bus.write_byte_data(self.address, 0x00, 0x70)
 
     def axes_raw(self):
         data = self.bus.read_i2c_block_data(self.address, 0x00)
-        #print map(hex, data)
         x = self.__convert(data, 3)
         y = self.__convert(data, 7)
         z = self.__convert(data, 5)
@@ -69,8 +58,7 @@ class HMC5883L(object):
 
     def axes(self):
         (x, y, z) = self.axes_raw()
-        
-        return (x-self.x_off, y-self.y_off, z-self.z_off)
+        return (self.x_scale*x-self.x_off, self.y_scale*y-self.y_off, self.z_scale*z-self.z_off)
 
 
 class MMA7455(object):
@@ -160,7 +148,7 @@ class MMA7455(object):
         
 
 class Compass(object):
-    def __init__(self, location, magnetic=HMC5883L(), accel=MMA7455()):
+    def __init__(self, location, magnetic, accel):
         '''
         sensor is a gyro or magnetic sensor device like HMC5883L
         location is triple (long(°), lat(°), altitude(m))
@@ -168,7 +156,7 @@ class Compass(object):
         lon = location[0]
         lat = location[1]
         alt = location[2]
-        
+
         self.magnetic = magnetic
         self.accel = accel
         self.declination = geomag.declination(dlat=lat, dlon=lon, h=3.2808399*alt)
@@ -186,31 +174,41 @@ class Compass(object):
         phi = -numpy.radians(roll)
         theta = numpy.radians(pitch)
         B = self.magnetic.axes()
-        print(B)
         B = self.__normalize(B)
         
-        Vh = (0, 0, 0)
-        Vs = (1, 1, 1)
         
-        num  = Vs[2]*(-B[2] - Vh[2])*numpy.sin(phi)
-        num -= Vs[0]*(B[0] - Vh[0])*numpy.cos(phi)
+        num  = -B[2]*numpy.sin(phi)
+        num -= B[0]*numpy.cos(phi)
         
-        den  = Vs[1]*(B[1] - Vh[1])*numpy.cos(theta)
-        den += Vs[0]*(B[0] - Vh[0])*numpy.sin(theta)*numpy.sin(phi)
-        den += Vs[2]*(-B[2] - Vh[2])*numpy.sin(theta)*numpy.cos(phi)
+        den  = B[1]*numpy.cos(theta)
+        den += B[0]*numpy.sin(theta)*numpy.sin(phi)
+        den += -B[2]*numpy.sin(theta)*numpy.cos(phi)
         
-        yawn = numpy.arctan2(num, den)
+        az = numpy.degrees(numpy.arctan2(num, den))
+
+        # approximation with matlab:
+        az = (360 + az) % 360
+        p1 =  -0.0001617
+        p2 =       1.054
+        p3 =       4.326
+       
+        az = p1*az**2 + p2*az + p3
         
-        return tuple([int(i) for i in (numpy.degrees(yawn), roll, pitch)])
+        return tuple([int(i) for i in (az - self.declination, roll, pitch)])
     
 
 if __name__ == "__main__":
     # http://magnetic-declination.com/Great%20Britain%20(UK)/Harrogate#
     compass = Compass((48.542840, 13.902494, 550))
     compass.calibrate()
-
+    fir = []
     while True:
-        angles = list(map(int, compass.angles()))
-        print('{}\t{}\t{}'.format(angles[0], angles[1], angles[2]))
+        (x, y, z) = compass.magnetic.axes()
+        print(x, y)
+        #angles = list(map(int, compass.angles()))
+        #val = (angles[0] + sum(fir)) / (len(fir)+1)
+        #fir.insert(0, val)
+        #print(val)
+        #fir = fir[0:2]
         time.sleep(0.1)
   

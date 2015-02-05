@@ -266,7 +266,7 @@ class Configuration(object):
         else:
             self.name = 'default'
             self.satellites = [24278, 7530, 25544, 39444, 27607, 36122]
-            self.locations = [Location('JN68WN', (13,54,9), (48,32,34.2), 550)]
+            self.locations = [Location('JN68WN', 13.902486, 48.542816, 550)]
             
             json.dump(self.__dict__(), open(path, 'w'), sort_keys=True, indent=4, separators=(',', ': '), cls=ExtendedEncoder)
             

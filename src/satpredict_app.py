@@ -6,6 +6,9 @@ import copy
 import time
 import math
 import ephem
+import sensors
+import numpy
+import sys
 
 class SatPredictApp(tk.Tk):
     
@@ -22,11 +25,11 @@ class SatPredictApp(tk.Tk):
             self.active_trsp = None
         
         self.active_location = self.cfg.locations[0]
-        self.gyro = None
+        self.compass = None
         
         self.initialize_gui()
         
-        self.display_timer_interval = 500
+        self.display_timer_interval = 250
         self.display_timer()
     
     def initialize_gui(self):
@@ -57,8 +60,12 @@ class SatPredictApp(tk.Tk):
         self.device_menu.add_command(label='Enable CAT')
         
         state = tk.ACTIVE if 'RASPBERRY_PI' in os.environ else tk.DISABLED 
-        self.device_menu.add_command(label='Enable sensors', command=self.gyro_cb, state=state)
+        self.device_menu.add_command(label='Enable sensors', command=self.compass_cb, state=state)
         menubar.add_cascade(label='Devices', menu=self.device_menu)
+        
+        self.settings_menu = tk.Menu(menubar, tearoff=0, activebackground='#F00000')
+        self.settings_menu.add_command(label='Update TLE', command=self.update_tle_cb)
+        menubar.add_cascade(label='Settings', menu=self.settings_menu)
         
         power_menu = tk.Menu(menubar, tearoff=0, activebackground='#F00000')
         power_menu.add_command(label='Exit', command=lambda: self.power_cb('EXIT'))
@@ -99,8 +106,8 @@ class SatPredictApp(tk.Tk):
         self.polar.trsp_name.set(name)
         
         #Calcualte position of current satellite
-        lon = self.active_location.long
-        lat = self.active_location.lat
+        lon = self.__loc_2_dms(self.active_location.long)
+        lat = self.__loc_2_dms(self.active_location.lat)
         obs = ephem.Observer()
         obs.lon = '{}:{}:{}'.format(lon[0], lon[1], lon[2])
         obs.lat = '{}:{}:{}'.format(lat[0], lat[1], lat[2])
@@ -113,8 +120,45 @@ class SatPredictApp(tk.Tk):
         el = math.degrees(body.alt)
         self.polar.update_satpos(az, el)
         
+        if self.compass:
+            try:
+                deg = self.compass.angles()
+                self.polar.update_antpos(deg[0], deg[2])
+            except:
+                self.compass = None
+                self.polar.update_antpos(0, 90)
+        
         #restart timer for next event
         self.after(self.display_timer_interval, self.display_timer)
+    
+    
+    def update_tle_cb(self):
+        try:
+            self.db.update()
+        except:
+            text = sys.exc_info()[0].__name__
+            self.error_message(text)
+    
+    
+    def error_message(self, text):
+        top = tk.Toplevel(self, bd=2, relief=tk.RAISED)
+        top.title('Error')
+        
+        top.resizable(False, False)
+        top.geometry('200x100+60+40')
+        
+        msg = tk.Message(top, text=text, width=200)
+        msg.pack(expand=True)
+        
+        button = tk.Button(top, text='OK', command=top.destroy, activebackground='#F00000')
+        button.pack()
+        
+        def destroy(e):
+            self.focus()
+            top.destroy()
+        
+        top.bind('<Return>', destroy)
+        top.focus()
     
     
     
@@ -127,16 +171,21 @@ class SatPredictApp(tk.Tk):
         self.device_menu.entryconfig(0, label=label)
         
         #sensors
-        label = 'Enable sensors' if self.gyro == None else 'Disable sensors'
+        label = 'Enable Compass' if self.compass == None else 'Disable Compass'
         self.device_menu.entryconfig(1, label=label)
     
     
-    def gyro_cb(self):
-        if self.gyro == None:
-            self.gyro = 10
-        else:
-            self.gyro = None
-            
+    def compass_cb(self):
+        try:
+            if self.compass == None:
+                coord = (self.active_location.long, self.active_location.lat, self.active_location.elev)
+                self.compass = sensors.Compass(coord, sensors.HMC5883L(), sensors.MMA7455())
+                self.compass.calibrate()
+            else:
+                self.compass = None
+        except:
+            text = sys.exc_info()[0].__name__
+            self.error_message(text)
     
     
     def satellite_dir_cb(self):
@@ -206,10 +255,17 @@ class SatPredictApp(tk.Tk):
         else:
             exit()
         
+    def __loc_2_dms(self, location):
+        d = int(location)
+        location = (location % 1) * 60
+        min = int(location)
+        location = (location % 1) * 60 
+        sec = location
+        return (d, min, sec)
         
         
 class PolarMap(tk.Frame):    
-    def __init__(self, parent):
+    def __init__(self, parent, filter_coeff=[0.4, 0.3, 0.2, 0.1]):
         tk.Frame.__init__(self, parent)
         self.parent = parent
         
@@ -267,9 +323,12 @@ class PolarMap(tk.Frame):
         #add dot for satellite tracking
         r = 3
         self.dot_radius = r
-        self.sat_dot = self.map.create_oval(105-r, 105-r, 105+r, 105+r, fill='#000000')
-        self.ant_dot = self.map.create_oval(105-r, 105-r, 105+r, 105+r, fill='#FF0000')
+        self.sat_dot = self.map.create_oval(105-r, 105-r, 105+r, 105+r, fill='black')
+        self.ant_dot = self.map.create_oval(105-r, 105-r, 105+r, 105+r, fill='red')
         self.grid()
+        
+        self.__antpos_filter = numpy.zeros((3, len(filter_coeff)))
+        self.__antpos_filter_coeff = numpy.matrix(filter_coeff).getT()
     
     
     def draw_outline(self):
@@ -294,9 +353,19 @@ class PolarMap(tk.Frame):
     
     def update_satpos(self, az, el):
         self.__update_dotpos(az, el, self.sat_dot, 'black')
-        
+    
+    
     def update_antpos(self, az, el):
-        self.__update_dotpos(az, el, self.ant_dot, 'green')
+        if el < 0: el = 0
+        
+        x_vect = numpy.cos(numpy.radians(az))
+        y_vect = numpy.sin(numpy.radians(az))
+        
+        new = numpy.concatenate((numpy.matrix([[x_vect], [y_vect], [el]]), self.__antpos_filter[:, 0:-1]), 1) * self.__antpos_filter_coeff
+        self.__antpos_filter = numpy.concatenate((new, self.__antpos_filter[:, 0:-1]), 1)
+        az = numpy.degrees(numpy.arctan2(new[1, 0], new[0, 0]))
+
+        self.__update_dotpos(az, new[2, 0], self.ant_dot, 'green')
         
         
     def __update_dotpos(self, az, el, dot, color):
@@ -315,8 +384,8 @@ class PolarMap(tk.Frame):
         dx = x - pos[0]
         dy = y - pos[1]
         
-        self.map.move(self.sat_dot, dx, dy)
+        self.map.move(dot, dx, dy)
         if z < 0:
-            self.map.itemconfig(self.sat_dot, fill='')
+            self.map.itemconfig(dot, fill='', outline='')
         else:
-            self.map.itemconfig(self.sat_dot, fill=color)
+            self.map.itemconfig(dot, fill=color, outline='black')
