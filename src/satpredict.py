@@ -21,6 +21,7 @@ def main():
     if 'RASPBERRY_PI' in os.environ:
         app.update()
         subprocess.call(['xwit', '-warp', '0', '0'])
+        subprocess.call(['xset', 'r', 'off'])
         
     app.mainloop()
 

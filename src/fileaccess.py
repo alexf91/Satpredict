@@ -204,6 +204,7 @@ class Transponder(object):
         self.invert = invert
         self.pl = pl
     
+    
     @classmethod
     def fromData(cls, name, mode, down, up=None, invert=False, pl=None):
         m = mode

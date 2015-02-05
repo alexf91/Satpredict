@@ -9,6 +9,7 @@ import ephem
 import sensors
 import numpy
 import sys
+import collections
 
 class SatPredictApp(tk.Tk):
     
@@ -18,19 +19,28 @@ class SatPredictApp(tk.Tk):
         
         self.cfg = fileaccess.Configuration(os.path.expanduser('~/.satpredict/default.conf'))
         self.db = fileaccess.Database()
-        self.active_sat = self.db.query(self.cfg.satellites)[0]
-        if len(self.active_sat.transponders) > 0:
-            self.active_trsp = self.active_sat.transponders[0]
-        else:
-            self.active_trsp = None
         
         self.active_location = self.cfg.locations[0]
         self.compass = None
         
+        self.up_freq = None    # Uplink frequency without doppler shift
+        self.down_freq = None  # Downlink frequency without doppler shift
+        self.up_doppler_freq = None
+        self.down_doppler_freq = None
+        
         self.initialize_gui()
+        
+        self.active_sat = self.db.query(self.cfg.satellites)[0]
+        if len(self.active_sat.transponders) > 0:
+            self.select_transponder(self.active_sat.transponders[0])
+        else:
+            self.select_transponder(None)
         
         self.display_timer_interval = 250
         self.display_timer()
+        
+        self.cat_timer_interval = 1000
+        self.cat_timer()
     
     def initialize_gui(self):
         self.polar = PolarMap(self)
@@ -79,7 +89,11 @@ class SatPredictApp(tk.Tk):
         self.config(menu=menubar)
         self.grid()
         
-        self.bind('<Escape>', self.escape_cb)
+        self.bind('<Escape>', lambda e: self.event_generate('<F10>'))
+        self.bind('<Up>', lambda e: self.frequency_changed_cb('UP'))
+        self.bind('<Down>', lambda e: self.frequency_changed_cb('DOWN'))
+        self.bind('<KeyPress-BackSpace>', lambda e: self.ptt_cb(True))
+        self.bind('<KeyRelease-BackSpace>', lambda e: self.ptt_cb(False))
         
         self.az = 0
     
@@ -105,16 +119,7 @@ class SatPredictApp(tk.Tk):
         
         self.polar.trsp_name.set(name)
         
-        #Calcualte position of current satellite
-        lon = self.__loc_2_dms(self.active_location.long)
-        lat = self.__loc_2_dms(self.active_location.lat)
-        obs = ephem.Observer()
-        obs.lon = '{}:{}:{}'.format(lon[0], lon[1], lon[2])
-        obs.lat = '{}:{}:{}'.format(lat[0], lat[1], lat[2])
-        obs.elevation = self.active_location.elev
-        
-        body = ephem.readtle(self.active_sat.line1, self.active_sat.line2, self.active_sat.line3)
-        body.compute(obs)
+        body = self.calculate_sat_position()
         
         az = math.degrees(body.az)
         el = math.degrees(body.alt)
@@ -126,10 +131,75 @@ class SatPredictApp(tk.Tk):
                 self.polar.update_antpos(deg[0], deg[2])
             except:
                 self.compass = None
-                self.polar.update_antpos(0, 90)
+        else:
+            self.polar.update_antpos(0, 90)
+        
+        self.polar.print_trsp(self.up_freq, self.down_freq, self.up_doppler_freq, self.down_doppler_freq)
         
         #restart timer for next event
         self.after(self.display_timer_interval, self.display_timer)
+    
+    
+    def cat_timer(self):
+        self.calculate_doppler_shift()
+        self.after(self.cat_timer_interval, self.cat_timer)
+    
+    
+    def calculate_sat_position(self):
+        #Calcualte position of current satellite
+        lon = self.__loc_2_dms(self.active_location.long)
+        lat = self.__loc_2_dms(self.active_location.lat)
+        obs = ephem.Observer()
+        obs.lon = '{}:{}:{}'.format(lon[0], lon[1], lon[2])
+        obs.lat = '{}:{}:{}'.format(lat[0], lat[1], lat[2])
+        obs.elevation = self.active_location.elev
+        
+        body = ephem.readtle(self.active_sat.line1, self.active_sat.line2, self.active_sat.line3)
+        body.compute(obs)
+        
+        return body
+    
+    def calculate_doppler_shift(self):
+        body = self.calculate_sat_position()
+        vel = -body.range_velocity * 1.055 # bug in xephem
+        print(vel, body.range)
+        c = 299792458
+        shift = numpy.sqrt((c + vel) / (c - vel))
+        if self.up_freq:
+            self.up_doppler_freq = self.up_freq * shift
+        else:
+            self.up_doppler_freq = None
+        
+        if self.down_freq:
+            self.down_doppler_freq = self.down_freq * shift
+        else:
+            self.down_doppler_freq = None
+        
+    
+    
+    def select_transponder(self, trsp):
+        self.active_trsp = trsp;
+        if trsp == None:
+            self.polar.up_sat.set('')
+            self.polar.down_sat.set('')
+            
+        if isinstance(trsp.up, collections.Sequence):
+            if trsp.invert:
+                self.up_freq = trsp.up[1]
+            else:
+                self.up_freq = trsp.up[0]
+                
+        else:
+            self.up_freq = trsp.up
+        
+        
+        if isinstance(trsp.down, collections.Sequence):
+            self.down_freq = trsp.down[0]
+        else:
+            self.down_freq = trsp.down
+        
+        self.polar.print_trsp(self.up_freq, self.down_freq, self.up_doppler_freq, self.down_doppler_freq)
+        
     
     
     def update_tle_cb(self):
@@ -161,9 +231,16 @@ class SatPredictApp(tk.Tk):
         top.focus()
     
     
+    def frequency_changed_cb(self, dir):
+        if dir == 'UP':
+            pass
+        
+        elif dir == 'DOWN':
+            pass
     
-    def escape_cb(self, event):
-        self.event_generate('<F10>')
+    def ptt_cb(self, enable):
+        print(enable)
+    
     
     def devices_dir_cb(self):
         #CAT
@@ -206,9 +283,9 @@ class SatPredictApp(tk.Tk):
     def satellite_select_cb(self, sat):
         self.active_sat = sat
         if len(sat.transponders) > 0:
-            self.active_trsp = sat.transponders[0]
+            self.select_transponder(sat.transponders[0])
         else:
-            self.active_trsp = None
+            self.select_transponder(None)
 
 
 
@@ -221,15 +298,10 @@ class SatPredictApp(tk.Tk):
         
         for trsp in self.active_sat.transponders:
             def make_lambda(trsp):
-                return lambda: self.transponder_select_cb(trsp)
+                return lambda: self.select_transponder(trsp)
             
             self.trsp_menu.add_command(label=trsp.name, command=make_lambda(trsp))
             
-            
-    
-    def transponder_select_cb(self, trsp):
-        self.active_trsp = trsp
-    
     
     def location_dir_cb(self):
         self.loc_menu.delete(0, tk.END)
@@ -291,31 +363,31 @@ class PolarMap(tk.Frame):
         self.label.grid(column=9, row=1, sticky=tk.W, columnspan=2)
         
         self.label = tk.Label(self, text='⇧', fg=color, font=font(16))
-        self.label.grid(column=9, row=2, sticky=tk.W, columnspan=2)
+        self.label.grid(column=9, row=2, sticky=tk.W)
         
         self.label = tk.Label(self, text='⇩', fg=color, font=font(16))
-        self.label.grid(column=9, row=3, sticky=tk.W, columnspan=2) 
+        self.label.grid(column=9, row=3, sticky=tk.W) 
         
-        self.label = tk.Label(self, textvar=self.up_sat, fg=color, font=font(16))
-        self.label.grid(column=10, row=2)
+        self.label = tk.Label(self, textvar=self.up_sat, fg=color, font=font(8))
+        self.label.grid(column=10, row=2, sticky=tk.W)
         
-        self.label = tk.Label(self, textvar=self.down_sat, fg=color, font=font(16))
-        self.label.grid(column=10, row=3)
+        self.label = tk.Label(self, textvar=self.down_sat, fg=color, font=font(8))
+        self.label.grid(column=10, row=3, sticky=tk.W)
         
         self.label = tk.Label(self, text='Doppler:', fg=color, font=font(8))
         self.label.grid(column=9, row=4, sticky=tk.W, columnspan=2)
         
         self.label = tk.Label(self, text='⇧', fg=color, font=font(16))
-        self.label.grid(column=9, row=5, sticky=tk.W, columnspan=2)
+        self.label.grid(column=9, row=5, sticky=tk.W)
         
         self.label = tk.Label(self, text='⇩', fg=color, font=font(16))
-        self.label.grid(column=9, row=6, sticky=tk.W, columnspan=2) 
+        self.label.grid(column=9, row=6, sticky=tk.W) 
         
-        self.label = tk.Label(self, textvar=self.up_doppler, fg=color, font=font(16))
-        self.label.grid(column=10, row=5)
+        self.label = tk.Label(self, textvar=self.up_doppler, fg=color, font=font(8))
+        self.label.grid(column=10, row=5, sticky=tk.W)
         
-        self.label = tk.Label(self, textvar=self.down_doppler, fg=color, font=font(16))
-        self.label.grid(column=10, row=6)
+        self.label = tk.Label(self, textvar=self.down_doppler, fg=color, font=font(8))
+        self.label.grid(column=10, row=6, sticky=tk.W)
         
         self.label = tk.Label(self, textvar=self.time, fg=color, font=font(8))
         self.label.grid(column=9, row=7, sticky=tk.W, columnspan=2)
@@ -323,6 +395,7 @@ class PolarMap(tk.Frame):
         #add dot for satellite tracking
         r = 3
         self.dot_radius = r
+
         self.sat_dot = self.map.create_oval(105-r, 105-r, 105+r, 105+r, fill='black')
         self.ant_dot = self.map.create_oval(105-r, 105-r, 105+r, 105+r, fill='red')
         self.grid()
@@ -365,7 +438,7 @@ class PolarMap(tk.Frame):
         self.__antpos_filter = numpy.concatenate((new, self.__antpos_filter[:, 0:-1]), 1)
         az = numpy.degrees(numpy.arctan2(new[1, 0], new[0, 0]))
 
-        self.__update_dotpos(az, new[2, 0], self.ant_dot, 'green')
+        self.__update_dotpos(az, new[2, 0], self.ant_dot, 'red')
         
         
     def __update_dotpos(self, az, el, dot, color):
@@ -389,3 +462,14 @@ class PolarMap(tk.Frame):
             self.map.itemconfig(dot, fill='', outline='')
         else:
             self.map.itemconfig(dot, fill=color, outline='black')
+
+    def print_trsp(self, up, down, up_doppler, down_doppler):
+        up = up / 1000 if up else None
+        down = down / 1000 if down else None
+        up_doppler = up_doppler / 1000 if up_doppler else None
+        down_doppler = down_doppler / 1000 if down_doppler else None
+        
+        self.up_sat.set('{}'.format(up))
+        self.down_sat.set('{}'.format(down))
+        self.up_doppler.set('{}'.format(up_doppler))
+        self.down_doppler.set('{}'.format(down_doppler))
