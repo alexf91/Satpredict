@@ -10,6 +10,7 @@ import sensors
 import numpy
 import sys
 import collections
+import Hamlib
 
 class SatPredictApp(tk.Tk):
     
@@ -41,7 +42,8 @@ class SatPredictApp(tk.Tk):
         
         self.cat_timer_interval = 1000
         self.cat_timer()
-    
+        
+
     def initialize_gui(self):
         self.polar = PolarMap(self)
         self.polar.focus()
@@ -161,17 +163,17 @@ class SatPredictApp(tk.Tk):
     
     def calculate_doppler_shift(self):
         body = self.calculate_sat_position()
-        vel = -body.range_velocity * 1.055 # bug in xephem
-        print(vel, body.range)
+        vel = -body.range_velocity * 1.055 # bug in xephem, ugly "fix"
+        
         c = 299792458
         shift = numpy.sqrt((c + vel) / (c - vel))
         if self.up_freq:
-            self.up_doppler_freq = self.up_freq * shift
+            self.up_doppler_freq = int(self.up_freq * shift)
         else:
             self.up_doppler_freq = None
         
         if self.down_freq:
-            self.down_doppler_freq = self.down_freq * shift
+            self.down_doppler_freq = int(self.down_freq * shift)
         else:
             self.down_doppler_freq = None
         
@@ -232,11 +234,25 @@ class SatPredictApp(tk.Tk):
     
     
     def frequency_changed_cb(self, dir):
+        inc = 100
         if dir == 'UP':
-            pass
-        
+            self.down_freq += inc
+            if self.up_freq:
+                if self.active_trsp.invert:
+                    self.up_freq -= inc
+                else:
+                    self.up_freq += inc
         elif dir == 'DOWN':
-            pass
+            self.down_freq -= inc
+            if self.up_freq:
+                if self.active_trsp.invert:
+                    self.up_freq += inc
+                else:
+                    self.up_freq -= inc
+        
+        self.calculate_doppler_shift()
+        self.polar.print_trsp(self.up_freq, self.down_freq, self.up_doppler_freq, self.down_doppler_freq)
+    
     
     def ptt_cb(self, enable):
         print(enable)
@@ -473,3 +489,9 @@ class PolarMap(tk.Frame):
         self.down_sat.set('{}'.format(down))
         self.up_doppler.set('{}'.format(up_doppler))
         self.down_doppler.set('{}'.format(down_doppler))
+        
+        
+        
+        
+        
+        

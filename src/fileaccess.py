@@ -117,7 +117,10 @@ class SatelliteEntry(object):
     
     @property
     def line1(self):
-        return '{} ({})'.format(self.name, self.nick)
+        if self.nick:
+            return '{} ({})'.format(self.name, self.nick)
+        else:
+            return self.name
     
     @property
     def line2(self):
