@@ -10,7 +10,7 @@ import sensors
 import numpy
 import sys
 import collections
-import Hamlib
+import rigctl
 
 class SatPredictApp(tk.Tk):
     
@@ -28,6 +28,10 @@ class SatPredictApp(tk.Tk):
         self.down_freq = None  # Downlink frequency without doppler shift
         self.up_doppler_freq = None
         self.down_doppler_freq = None
+        
+        self.rigctld = None
+        self.rig = None
+        self.ptt_enabled = False
         
         self.initialize_gui()
         
@@ -69,10 +73,10 @@ class SatPredictApp(tk.Tk):
         
         
         self.device_menu = tk.Menu(menubar, tearoff=0, activebackground='#F00000', postcommand=self.devices_dir_cb)
-        self.device_menu.add_command(label='Enable CAT')
+        self.device_menu.add_command(label='Enable CAT', command=self.cat_cb)
         
         state = tk.ACTIVE if 'RASPBERRY_PI' in os.environ else tk.DISABLED 
-        self.device_menu.add_command(label='Enable sensors', command=self.compass_cb, state=state)
+        self.device_menu.add_command(label='Enable Compass', command=self.compass_cb, state=state)
         menubar.add_cascade(label='Devices', menu=self.device_menu)
         
         self.settings_menu = tk.Menu(menubar, tearoff=0, activebackground='#F00000')
@@ -136,15 +140,52 @@ class SatPredictApp(tk.Tk):
         else:
             self.polar.update_antpos(0, 90)
         
+        self.calculate_doppler_shift()
+        
         self.polar.print_trsp(self.up_freq, self.down_freq, self.up_doppler_freq, self.down_doppler_freq)
+        
+        if self.rigctld != None:
+            self.rigctld.poll()
+            if self.rigctld.returncode != None:
+                self.rigctld = None
+                self.rig = None
         
         #restart timer for next event
         self.after(self.display_timer_interval, self.display_timer)
     
     
     def cat_timer(self):
-        self.calculate_doppler_shift()
+        
+        if self.ptt_enabled == False and self.rig:
+            self.rig.set_freq(self.down_doppler_freq)
+        
         self.after(self.cat_timer_interval, self.cat_timer)
+    
+    
+    def cat_cb(self):
+        if self.rigctld == None:
+            try:
+                self.rigctld = subprocess.Popen(['rigctld', '-m120', '-r/dev/ttyUSB0', '-s38400'])
+                self.rigctld.poll()
+                if self.rigctld.returncode != None:
+                    self.rigctld = None
+                    self.rig = None
+                    return
+                
+                self.rig = rigctl.Rigctl()
+                
+            except:
+                self.rigctld = None
+                self.rig = None
+                return
+        
+        else:
+            self.rigctld.poll()
+            if self.rigctld.returncode == None:
+                self.rigctld.kill()
+            self.rigctld = None
+            self.rig = None
+
     
     
     def calculate_sat_position(self):
@@ -168,12 +209,12 @@ class SatPredictApp(tk.Tk):
         c = 299792458
         shift = numpy.sqrt((c + vel) / (c - vel))
         if self.up_freq:
-            self.up_doppler_freq = int(self.up_freq * shift)
+            self.up_doppler_freq = round(self.up_freq / shift)
         else:
             self.up_doppler_freq = None
         
         if self.down_freq:
-            self.down_doppler_freq = int(self.down_freq * shift)
+            self.down_doppler_freq = round(self.down_freq * shift)
         else:
             self.down_doppler_freq = None
         
@@ -200,9 +241,36 @@ class SatPredictApp(tk.Tk):
         else:
             self.down_freq = trsp.down
         
+        self.calculate_doppler_shift()
         self.polar.print_trsp(self.up_freq, self.down_freq, self.up_doppler_freq, self.down_doppler_freq)
         
+        if self.rig and trsp:
+            self.adjust_frequency(up=True)
+            self.adjust_frequency(up=False)
     
+    
+    
+    def adjust_frequency(self, up=False):
+        mode = None
+        if self.active_trsp.mode == fileaccess.Transponder.Mode.LINEAR:
+            mode = rigctl.Rigctl.Mode.LSB if up else rigctl.Rigctl.Mode.USB
+        elif self.active_trsp.mode == fileaccess.Transponder.Mode.FM:
+            mode = rigctl.Rigctl.Mode.FM
+        elif self.active_trsp.mode == fileaccess.Transponder.Mode.CW:
+            mode = rigctl.Rigctl.Mode.CW
+        elif self.active_trsp.mode == fileaccess.Transponder.Mode.DIGI:
+            mode = rigctl.Rigctl.Mode.USB
+        
+        assert mode != None
+        
+        if up:
+            self.rig.set_freq(self.up_doppler_freq)
+            self.rig.set_mode(mode)
+        else:
+            self.rig.set_freq(self.down_doppler_freq)
+            self.rig.set_mode(mode)
+        
+        
     
     def update_tle_cb(self):
         try:
@@ -255,12 +323,20 @@ class SatPredictApp(tk.Tk):
     
     
     def ptt_cb(self, enable):
-        print(enable)
+        self.ptt_enabled = enable
+        if self.rig:
+            if enable and self.up_doppler_freq:
+                self.adjust_frequency(up=True)
+                self.rig.set_ptt(True)
+            else:
+                self.rig.set_ptt(False)
+                self.after(200, lambda: self.adjust_frequency(up=False))
+                
     
     
     def devices_dir_cb(self):
         #CAT
-        label = 'Enable CAT'
+        label = 'Enable CAT' if self.rig == None else 'Disable CAT'
         self.device_menu.entryconfig(0, label=label)
         
         #sensors
