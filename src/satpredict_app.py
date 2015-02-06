@@ -106,6 +106,10 @@ class SatPredictApp(tk.Tk):
     
     
     def display_timer(self):
+        if self.ptt_enabled: # Fix severe interference of TFT display (at least for transmitting)
+            self.after(self.display_timer_interval, self.display_timer)
+            return
+        
         #Display UTC on screen
         t = time.strftime('%H:%M:%S')
         self.polar.time.set(t)
