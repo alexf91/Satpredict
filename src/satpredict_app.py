@@ -29,8 +29,9 @@ class SatPredictApp(tk.Tk):
         self.up_doppler_freq = None
         self.down_doppler_freq = None
         
-        self.rigctld = None
+        self.rigctld = rigctl.Daemon('rigctld -m120 -r/dev/ttyUSB0 -s38400')
         self.rig = None
+
         self.ptt_enabled = False
         
         self.initialize_gui()
@@ -143,13 +144,13 @@ class SatPredictApp(tk.Tk):
         self.calculate_doppler_shift()
         
         self.polar.print_trsp(self.up_freq, self.down_freq, self.up_doppler_freq, self.down_doppler_freq)
-        
-        if self.rigctld != None:
-            self.rigctld.poll()
-            if self.rigctld.returncode != None:
-                self.rigctld = None
-                self.rig = None
-        
+            
+        #periodically check for running rigctld and if 
+        tty = os.path.exists('/dev/ttyUSB0')
+        if (self.rigctld.running() and tty is False) or not self.rigctld.running():
+            self.rigctld.stop()
+            self.rig = None
+                
         #restart timer for next event
         self.after(self.display_timer_interval, self.display_timer)
     
@@ -163,29 +164,15 @@ class SatPredictApp(tk.Tk):
     
     
     def cat_cb(self):
-        if self.rigctld == None:
-            try:
-                self.rigctld = subprocess.Popen(['rigctld', '-m120', '-r/dev/ttyUSB0', '-s38400'])
-                self.rigctld.poll()
-                if self.rigctld.returncode != None:
-                    self.rigctld = None
-                    self.rig = None
-                    return
+        if self.rig is None:
+            if os.path.exists('/dev/ttyUSB0'):
+                self.rigctld.start()
+                time.sleep(0.05)
+                self.rig = rigctl.Rig()
                 
-                self.rig = rigctl.Rigctl()
-                
-            except:
-                self.rigctld = None
-                self.rig = None
-                return
-        
         else:
-            self.rigctld.poll()
-            if self.rigctld.returncode == None:
-                self.rigctld.kill()
-            self.rigctld = None
+            self.rigctld.stop()
             self.rig = None
-
     
     
     def calculate_sat_position(self):
@@ -222,7 +209,7 @@ class SatPredictApp(tk.Tk):
     
     def select_transponder(self, trsp):
         self.active_trsp = trsp;
-        if trsp == None:
+        if trsp is None:
             self.polar.up_sat.set('')
             self.polar.down_sat.set('')
             
@@ -253,15 +240,15 @@ class SatPredictApp(tk.Tk):
     def adjust_frequency(self, up=False):
         mode = None
         if self.active_trsp.mode == fileaccess.Transponder.Mode.LINEAR:
-            mode = rigctl.Rigctl.Mode.LSB if up else rigctl.Rigctl.Mode.USB
+            mode = rigctl.Rig.Mode.LSB if up else rigctl.Rig.Mode.USB
         elif self.active_trsp.mode == fileaccess.Transponder.Mode.FM:
-            mode = rigctl.Rigctl.Mode.FM
+            mode = rigctl.Rig.Mode.FM
         elif self.active_trsp.mode == fileaccess.Transponder.Mode.CW:
-            mode = rigctl.Rigctl.Mode.CW
+            mode = rigctl.Rig.Mode.CW
         elif self.active_trsp.mode == fileaccess.Transponder.Mode.DIGI:
-            mode = rigctl.Rigctl.Mode.USB
+            mode = rigctl.Rig.Mode.USB
         
-        assert mode != None
+        assert mode is not None
         
         if up:
             self.rig.set_freq(self.up_doppler_freq)

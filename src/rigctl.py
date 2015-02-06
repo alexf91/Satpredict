@@ -4,7 +4,7 @@ import enum
 import subprocess
 import time
 
-class Rigctl(object):
+class Rig(object):
     
     class Mode(enum.Enum):
         USB = 0
@@ -47,7 +47,58 @@ class Rigctl(object):
         self.command('\\set_ptt {}\n'.format(int(en)))
         
 
+class Daemon(object):
+    def __init__(self, cmd):
+        self.cmd = cmd
+        self.p = None
+    
+    def running(self):
+        if self.p is None:
+            return False
+        self.p.poll()
+        if self.p.returncode is not None:
+            self.p.wait()
+            return False
+        else:
+            return True
+    
+    def restart(self):
+        self.stop()
+        self.start()
+    
+    def stop(self):
+        if self.running():
+            self.p.terminate() # might not be the best idea...
+        
+        if self.p is not None:
+            self.p.wait()
+            self.p = None
+    
+    def start(self):
+        if self.running():
+            return
+        self.p = subprocess.Popen(self.cmd.split())
+    
+        
+        
+
 if __name__ == '__main__':
-    r = Rigctl()
-    r.set_freq(28120000)
+    rigctld = Daemon('rigctld -m120 -r/dev/ttyUSB0 -s38400')
+    time.sleep(1)
+    print(rigctld.running())
+    rigctld.stop()
+    time.sleep(1)
+    print(rigctld.running())
+    rigctld.restart()
+    time.sleep(1)
+    print(rigctld.running())
+    rigctld.restart()
+    time.sleep(1)
+    print(rigctld.running())
+    for i in range(100):
+        time.sleep(1)
+        print(rigctld.running())
+
+    
+    
     
