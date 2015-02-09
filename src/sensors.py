@@ -97,29 +97,51 @@ class MMA7455(object):
         val = self.__twos_complement(data[offset+1] << 8 | data[offset], 10)
         return val
     
-    def calibrate(self):
+    def calibrate(self, offs=None):
         '''
-        requires sensor to be completely flat (x=0g, y=0g, z=1g)
+        If no offset argument is passed, the sensor is calibrated and needs to be completely flat
         '''
-        x_off = 0
-        y_off = 0
-        z_off = 0
-        for i in range(0, 16):
-            (x, y, z) = self.axes_raw()
+        if not offs:
+            x_off = 0
+            y_off = 0
+            z_off = 0
+
+            self.bus.write_byte_data(self.address, 0x10, 0)
+            self.bus.write_byte_data(self.address, 0x11, 0)
+            self.bus.write_byte_data(self.address, 0x12, 0)
+            self.bus.write_byte_data(self.address, 0x13, 0)
+            self.bus.write_byte_data(self.address, 0x14, 0)
+            self.bus.write_byte_data(self.address, 0x15, 0)  
+
+            for i in range(0, 16):
+                (x, y, z) = self.axes_raw()
+                
+                x_off += -2*x
+                y_off += -2*y
+                z_off +=  2 * (-64 - z)
+                
+                self.bus.write_byte_data(self.address, 0x10, x_off & 0xFF)
+                self.bus.write_byte_data(self.address, 0x11, x_off >> 8)
+                self.bus.write_byte_data(self.address, 0x12, y_off & 0xFF)
+                self.bus.write_byte_data(self.address, 0x13, y_off >> 8)
+                self.bus.write_byte_data(self.address, 0x14, z_off & 0xFF)
+                self.bus.write_byte_data(self.address, 0x15, z_off >> 8)        
             
-            x_off += -2*x
-            y_off += -2*y
-            z_off +=  2 * (-64 - z)
-            
+                time.sleep(0.05)
+            print('Calibrated MMA7455 with ({}, {}, {})'.format(x_off, y_off, z_off))
+        else:
+            x_off = offs[0]
+            y_off = offs[1]
+            z_off = offs[2]
+
             self.bus.write_byte_data(self.address, 0x10, x_off & 0xFF)
             self.bus.write_byte_data(self.address, 0x11, x_off >> 8)
             self.bus.write_byte_data(self.address, 0x12, y_off & 0xFF)
             self.bus.write_byte_data(self.address, 0x13, y_off >> 8)
             self.bus.write_byte_data(self.address, 0x14, z_off & 0xFF)
-            self.bus.write_byte_data(self.address, 0x15, z_off >> 8)        
+            self.bus.write_byte_data(self.address, 0x15, z_off >> 8)  
+
         
-            time.sleep(0.05)
-    
     def axes_raw(self):
         data = self.__read_block()
         x = self.__convert(data, 0)
@@ -167,7 +189,7 @@ class Compass(object):
 
     def calibrate(self):
         self.magnetic.calibrate()
-        self.accel.calibrate()
+        self.accel.calibrate((12, 76, -14))
 
     def angles(self):
         (roll, pitch) = self.accel.angles()

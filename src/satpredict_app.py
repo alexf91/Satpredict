@@ -82,8 +82,10 @@ class SatPredictApp(tk.Tk):
         
         self.settings_menu = tk.Menu(menubar, tearoff=0, activebackground='#F00000')
         self.settings_menu.add_command(label='Update TLE', command=self.update_tle_cb)
-        interval_menu = tk.Menu(menubar, tearoff=0, activebackground='#F00000', postcommand=lambda: self.interval_cb(interval_menu))
-        self.settings_menu.add_cascade(label='Update Interval', menu=interval_menu)
+        interval_menu_disp = tk.Menu(menubar, tearoff=0, activebackground='#F00000', postcommand=lambda: self.interval_cb('DISPLAY', interval_menu_disp))
+        interval_menu_cat = tk.Menu(menubar, tearoff=0, activebackground='#F00000', postcommand=lambda: self.interval_cb('CAT', interval_menu_cat))
+        self.settings_menu.add_cascade(label='Display Interval', menu=interval_menu_disp)
+        self.settings_menu.add_cascade(label='CAT Interval', menu=interval_menu_cat)
         menubar.add_cascade(label='Settings', menu=self.settings_menu)
         
         power_menu = tk.Menu(menubar, tearoff=0, activebackground='#F00000')
@@ -212,17 +214,24 @@ class SatPredictApp(tk.Tk):
             self.down_doppler_freq = None
         
     
-    def interval_cb(self, menu):
+    def interval_cb(self, timer, menu):
         
-        def cb(i):
-            self.display_timer_interval = i
+        def cb(timer, i):
+            if timer == 'DISPLAY':
+                self.display_timer_interval = i
+            elif timer == 'CAT':
+                self.cat_timer_interval = i
         
-        def make_lambda(interval):
-            return lambda: cb(interval)
+        def make_lambda(timer, interval):
+            return lambda: cb(timer, interval)
         
         menu.delete(0, tk.END)
-        for i in [100, 250, 500, 750, 1000, 2500, 5000]:
-            menu.add_command(label='{}ms'.format(i), command=make_lambda(i))
+        if timer == 'DISPLAY':
+            for i in [250, 500, 750, 1000, 2500, 5000]:
+                menu.add_command(label='{}ms'.format(i), command=make_lambda(timer, i))
+        elif timer == 'CAT':
+            for i in [500, 1000, 1500, 2000, 2500, 3000, 5000]:
+                menu.add_command(label='{}ms'.format(i), command=make_lambda(timer, i))
     
     
     def select_transponder(self, trsp):
