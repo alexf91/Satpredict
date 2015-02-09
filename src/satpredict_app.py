@@ -82,6 +82,8 @@ class SatPredictApp(tk.Tk):
         
         self.settings_menu = tk.Menu(menubar, tearoff=0, activebackground='#F00000')
         self.settings_menu.add_command(label='Update TLE', command=self.update_tle_cb)
+        interval_menu = tk.Menu(menubar, tearoff=0, activebackground='#F00000', postcommand=lambda: self.interval_cb(interval_menu))
+        self.settings_menu.add_cascade(label='Update Interval', menu=interval_menu)
         menubar.add_cascade(label='Settings', menu=self.settings_menu)
         
         power_menu = tk.Menu(menubar, tearoff=0, activebackground='#F00000')
@@ -209,6 +211,18 @@ class SatPredictApp(tk.Tk):
         else:
             self.down_doppler_freq = None
         
+    
+    def interval_cb(self, menu):
+        
+        def cb(i):
+            self.display_timer_interval = i
+        
+        def make_lambda(interval):
+            return lambda: cb(interval)
+        
+        menu.delete(0, tk.END)
+        for i in [100, 250, 500, 750, 1000, 2500, 5000]:
+            menu.add_command(label='{}ms'.format(i), command=make_lambda(i))
     
     
     def select_transponder(self, trsp):
