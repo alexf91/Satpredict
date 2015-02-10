@@ -48,7 +48,7 @@ class SatPredictApp(tk.Tk):
         self.cat_timer_interval = 1000
         self.cat_timer()
         
-
+        
     def initialize_gui(self):
         self.polar = PolarMap(self)
         self.polar.focus()
@@ -337,7 +337,7 @@ class SatPredictApp(tk.Tk):
     
     
     def ptt_cb(self, enable):
-        self.ptt_enabled = enable
+        self.ptt_enabled = enable and (self.up_freq is not None)
         if self.rig:
             if enable and self.up_doppler_freq:
                 self.adjust_frequency(up=True)
