@@ -24,8 +24,6 @@ def main():
         subprocess.call(['xset', 'r', 'off'])
         
     app.mainloop()
-    if app.rigctld.running():
-        app.rigctld.stop()
 
 
 

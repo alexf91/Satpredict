@@ -79,6 +79,8 @@ class Daemon(object):
             return
         self.p = subprocess.Popen(self.cmd.split())
     
+    def __del__(self):
+        self.stop()
         
         
 

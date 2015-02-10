@@ -552,7 +552,7 @@ class PolarMap(tk.Frame):
         az = -az + 180
         
         #not mathematically correct, but the same as in gpredict
-        r_unity = (90 - abs(el)) / 90#abs(math.cos(math.radians(el)))
+        r_unity = (90 - abs(el)) / 90
         z = math.sin(math.radians(el))
         
         y = round(105 - self.dot_radius + 105 * math.cos(math.radians(az)) * r_unity)
