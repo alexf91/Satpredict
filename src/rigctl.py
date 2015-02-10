@@ -45,7 +45,9 @@ class Rig(object):
         
     def set_ptt(self, en):
         self.command('\\set_ptt {}\n'.format(int(en)))
-        
+    
+    def __del__(self):
+        self.s.close()
 
 class Daemon(object):
     def __init__(self, cmd):

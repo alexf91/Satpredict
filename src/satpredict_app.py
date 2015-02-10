@@ -51,7 +51,20 @@ class SatPredictApp(tk.Tk):
         
     def initialize_gui(self):
         self.polar = PolarMap(self)
+        
+        self.polar.bind('<Up>', lambda e: self.frequency_changed_cb('UP'))
+        self.polar.bind('<Down>', lambda e: self.frequency_changed_cb('DOWN'))
+        self.polar.bind('<KeyPress-BackSpace>', lambda e: self.ptt_cb(True))
+        self.polar.bind('<KeyRelease-BackSpace>', lambda e: self.ptt_cb(False))
+        
+        self.polar.grid(column=0, row=0)
         self.polar.focus()
+        
+        self.future_passes = FuturePasses(self)
+        self.future_passes.grid(column=0, row=0, sticky=tk.NW + tk.SE)
+        self.future_passes.lower(self.polar)
+        #self.future_passes.focus()
+        
         
         menubar = tk.Menu(self, activebackground='#F00000')
         
@@ -94,20 +107,13 @@ class SatPredictApp(tk.Tk):
         power_menu.add_command(label='Shutdown', command=lambda: self.power_cb('SHUTDOWN'))
         menubar.add_cascade(label='Power', menu=power_menu)
         
-        
         self.menubar = menubar
         
         self.config(menu=menubar)
         self.grid()
         
         self.bind('<Escape>', lambda e: self.event_generate('<F10>'))
-        self.bind('<Up>', lambda e: self.frequency_changed_cb('UP'))
-        self.bind('<Down>', lambda e: self.frequency_changed_cb('DOWN'))
-        self.bind('<KeyPress-BackSpace>', lambda e: self.ptt_cb(True))
-        self.bind('<KeyRelease-BackSpace>', lambda e: self.ptt_cb(False))
-        
-        self.az = 0
-    
+
     
     def display_timer(self):
         if self.ptt_enabled: # Fix severe interference of TFT display (at least for transmitting)
@@ -337,7 +343,7 @@ class SatPredictApp(tk.Tk):
     
     
     def ptt_cb(self, enable):
-        self.ptt_enabled = enable and (self.up_freq is not None)
+        self.ptt_enabled = enable and (self.up_freq is not None) and (self.rig is not None)
         if self.rig:
             if enable and self.up_doppler_freq:
                 self.adjust_frequency(up=True)
@@ -449,7 +455,10 @@ class PolarMap(tk.Frame):
         
         self.map = tk.Canvas(self, width=210, height=210, bg='white')
         self.draw_outline()
-        self.map.grid(column=0, row=0, columnspan=8, rowspan=8)
+        self.map.grid(column=0, row=0)
+        
+        self.info = tk.Frame(self, width=110)
+        
         
         self.sat_name = tk.StringVar(value='')
         self.trsp_name = tk.StringVar(value='')
@@ -462,41 +471,43 @@ class PolarMap(tk.Frame):
         font = lambda s: ('Monospace', s)
         color = 'black'
         
-        self.label = tk.Label(self, textvar = self.sat_name, fg=color, font=font(8))
-        self.label.grid(column=9, row=0, sticky=tk.W, columnspan=2)
+        self.label = tk.Label(self.info, textvar = self.sat_name, fg=color, font=font(8))
+        self.label.grid(column=0, row=0, sticky=tk.W, columnspan=2)
         
-        self.label = tk.Label(self, textvar = self.trsp_name, fg=color, font=font(8))
-        self.label.grid(column=9, row=1, sticky=tk.W, columnspan=2)
+        self.label = tk.Label(self.info, textvar = self.trsp_name, fg=color, font=font(8))
+        self.label.grid(column=0, row=1, sticky=tk.W, columnspan=2)
         
-        self.label = tk.Label(self, text='⇧', fg=color, font=font(16))
-        self.label.grid(column=9, row=2, sticky=tk.W)
+        self.label = tk.Label(self.info, text='⇧', fg=color, font=font(16))
+        self.label.grid(column=0, row=2, sticky=tk.W)
         
-        self.label = tk.Label(self, text='⇩', fg=color, font=font(16))
-        self.label.grid(column=9, row=3, sticky=tk.W) 
+        self.label = tk.Label(self.info, text='⇩', fg=color, font=font(16))
+        self.label.grid(column=0, row=3, sticky=tk.W) 
         
-        self.label = tk.Label(self, textvar=self.up_sat, fg=color, font=font(8))
-        self.label.grid(column=10, row=2, sticky=tk.W)
+        self.label = tk.Label(self.info, textvar=self.up_sat, fg=color, font=font(8))
+        self.label.grid(column=1, row=2, sticky=tk.W)
         
-        self.label = tk.Label(self, textvar=self.down_sat, fg=color, font=font(8))
-        self.label.grid(column=10, row=3, sticky=tk.W)
+        self.label = tk.Label(self.info, textvar=self.down_sat, fg=color, font=font(8))
+        self.label.grid(column=1, row=3, sticky=tk.W)
         
-        self.label = tk.Label(self, text='Doppler:', fg=color, font=font(8))
-        self.label.grid(column=9, row=4, sticky=tk.W, columnspan=2)
+        self.label = tk.Label(self.info, text='Doppler:', fg=color, font=font(8))
+        self.label.grid(column=0, row=4, sticky=tk.W, columnspan=2)
         
-        self.label = tk.Label(self, text='⇧', fg=color, font=font(16))
-        self.label.grid(column=9, row=5, sticky=tk.W)
+        self.label = tk.Label(self.info, text='⇧', fg=color, font=font(16))
+        self.label.grid(column=0, row=5, sticky=tk.W)
         
-        self.label = tk.Label(self, text='⇩', fg=color, font=font(16))
-        self.label.grid(column=9, row=6, sticky=tk.W) 
+        self.label = tk.Label(self.info, text='⇩', fg=color, font=font(16))
+        self.label.grid(column=0, row=6, sticky=tk.W) 
         
-        self.label = tk.Label(self, textvar=self.up_doppler, fg=color, font=font(8))
-        self.label.grid(column=10, row=5, sticky=tk.W)
+        self.label = tk.Label(self.info, textvar=self.up_doppler, fg=color, font=font(8))
+        self.label.grid(column=1, row=5, sticky=tk.W)
         
-        self.label = tk.Label(self, textvar=self.down_doppler, fg=color, font=font(8))
-        self.label.grid(column=10, row=6, sticky=tk.W)
+        self.label = tk.Label(self.info, textvar=self.down_doppler, fg=color, font=font(8))
+        self.label.grid(column=1, row=6, sticky=tk.W)
         
-        self.label = tk.Label(self, textvar=self.time, fg=color, font=font(8))
-        self.label.grid(column=9, row=7, sticky=tk.W, columnspan=2)
+        self.label = tk.Label(self.info, textvar=self.time, fg=color, font=font(8))
+        self.label.grid(column=0, row=7, sticky=tk.W, columnspan=2)
+        
+        self.info.grid(column=1, row=0)
         
         #add dot for satellite tracking
         r = 3
@@ -580,8 +591,14 @@ class PolarMap(tk.Frame):
         self.up_doppler.set('{}'.format(up_doppler))
         self.down_doppler.set('{}'.format(down_doppler))
         
+
+class FuturePasses(tk.Frame):
+    def __init__(self, parent):
+        tk.Frame.__init__(self, parent)
+        self.parent = parent
+        self.listbox = tk.Listbox(self)
+        self.listbox.pack(fill=tk.BOTH, expand=True)
         
-        
-        
+        self.listbox.insert(tk.END, 'asdf')
         
         
