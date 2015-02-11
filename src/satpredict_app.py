@@ -218,6 +218,7 @@ class SatPredictApp(tk.Tk):
         obs.lon = '{}:{}:{}'.format(lon[0], lon[1], lon[2])
         obs.lat = '{}:{}:{}'.format(lat[0], lat[1], lat[2])
         obs.elevation = self.active_location.elev
+        obs.pressure = 0
         
         body = ephem.readtle(self.active_sat.line1, self.active_sat.line2, self.active_sat.line3)
         body.compute(obs)
