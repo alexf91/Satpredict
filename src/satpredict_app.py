@@ -100,31 +100,34 @@ class SatPredictApp(tk.Tk):
         polar.focus()
         
         
-        next_passes = NextPasses(self)
-        self.frames['next'] = next_passes
+        next_passes = NextPasses(self, self.db.query(self.cfg.satellites), self.active_location)
+        self.frames['next'] = next_passes        
         next_passes.grid(column=0, row=0, sticky=tk.NW + tk.SE)
-        
                 
         
         menubar = tk.Menu(self, activebackground='#F00000')
         
         track_menu = tk.Menu(menubar, tearoff=0, activebackground='#F00000')
         
-        self.sat_menu = tk.Menu(track_menu, activebackground='#F00000', tearoff=0, postcommand=self.satellite_dir_cb)
+        self.sat_menu = tk.Menu(track_menu, activebackground='#F00000', tearoff=0,
+                                postcommand=self.satellite_dir_cb)
         track_menu.add_cascade(label='Satellite', menu=self.sat_menu)
         
         
-        self.trsp_menu = tk.Menu(track_menu, activebackground='#F00000', tearoff=0, postcommand=self.transponder_dir_cb)
+        self.trsp_menu = tk.Menu(track_menu, activebackground='#F00000', tearoff=0,
+                                 postcommand=self.transponder_dir_cb)
         self.trsp_menu.add_command(label='FM')
         track_menu.add_cascade(label='Transponder', menu=self.trsp_menu)
         
-        self.loc_menu = tk.Menu(track_menu, activebackground='#F00000', tearoff=0, postcommand=self.location_dir_cb)
+        self.loc_menu = tk.Menu(track_menu, activebackground='#F00000', tearoff=0,
+                                postcommand=self.location_dir_cb)
         track_menu.add_cascade(label='Location', menu=self.loc_menu)
         
         menubar.add_cascade(label='Tracking', menu=track_menu)
         
         
-        self.device_menu = tk.Menu(menubar, tearoff=0, activebackground='#F00000', postcommand=self.devices_dir_cb)
+        self.device_menu = tk.Menu(menubar, tearoff=0, activebackground='#F00000',
+                                   postcommand=self.devices_dir_cb)
         self.device_menu.add_command(label='Enable CAT', command=self.cat_cb)
         
         state = tk.ACTIVE if 'RASPBERRY_PI' in os.environ else tk.DISABLED 
@@ -138,8 +141,10 @@ class SatPredictApp(tk.Tk):
         
         self.settings_menu = tk.Menu(menubar, tearoff=0, activebackground='#F00000')
         self.settings_menu.add_command(label='Update TLE', command=self.update_tle_cb)
-        interval_menu_disp = tk.Menu(menubar, tearoff=0, activebackground='#F00000', postcommand=lambda: self.interval_cb('DISPLAY', interval_menu_disp))
-        interval_menu_cat = tk.Menu(menubar, tearoff=0, activebackground='#F00000', postcommand=lambda: self.interval_cb('CAT', interval_menu_cat))
+        interval_menu_disp = tk.Menu(menubar, tearoff=0, activebackground='#F00000',
+                                     postcommand=lambda: self.interval_cb('DISPLAY', interval_menu_disp))
+        interval_menu_cat = tk.Menu(menubar, tearoff=0, activebackground='#F00000',
+                                    postcommand=lambda: self.interval_cb('CAT', interval_menu_cat))
         self.settings_menu.add_cascade(label='Display Interval', menu=interval_menu_disp)
         self.settings_menu.add_cascade(label='CAT Interval', menu=interval_menu_cat)
         menubar.add_cascade(label='Settings', menu=self.settings_menu)
@@ -211,7 +216,10 @@ class SatPredictApp(tk.Tk):
         if (self.rigctld.running() and tty is False) or not self.rigctld.running():
             self.rigctld.stop()
             self.rig = None
-                
+        
+        #update next pass list
+        #self.frames['next'].calculate(self.db.query(self.cfg.satellites), self.active_location)
+        
         #restart timer for next event
         self.after(self.display_timer_interval, self.display_timer)
     
@@ -243,7 +251,12 @@ class SatPredictApp(tk.Tk):
             
         self.active_frame = self.frames[name]
         self.active_frame.grid()
-    
+        
+        try:
+            self.active_frame.redraw()
+        except AttributeError:
+            pass
+            
     
     def calculate_doppler_shift(self):
         body = create_body(self.active_sat)
@@ -423,17 +436,13 @@ class SatPredictApp(tk.Tk):
     
     
     def satellite_dir_cb(self):
+        def make_lambda(sat):
+            return lambda: self.satellite_select_cb(sat)
         self.sat_menu.delete(0, tk.END)
         
         for sat in self.db.query(self.cfg.satellites):            
-            if sat.nick != '':
-                entry = '{} ({})'.format(sat.name, sat.nick)
-            else:
-                entry = sat.name
-                
-            def make_lambda(sat):
-                return lambda: self.satellite_select_cb(sat)
-            self.sat_menu.add_command(label=entry, command=make_lambda(sat))
+            
+            self.sat_menu.add_command(label=sat, command=make_lambda(sat))
 
             
     
@@ -631,39 +640,51 @@ class PolarMap(tk.Frame):
         
 
 class NextPasses(tk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent, satellites, location):
         tk.Frame.__init__(self, parent)
         self.parent = parent
+        
+        self.satellites = satellites
+        self.location = location
+        
         self.tree = ttk.Treeview(self)
         
         self.tree['columns'] = ('time', 'az_in', 'az_out', 'el_max')
         
-        self.tree.column('#0', width=100)
+        self.tree.column('#0', width=150, anchor=tk.W)
         self.tree.heading('#0', text='Satellite')
         
-        self.tree.column('time', width=70)
+        self.tree.column('time', width=50, anchor=tk.E)
         self.tree.heading('time', text='Time')
 
-        self.tree.column('az_in', width=50, stretch=False)
+        self.tree.column('az_in', width=40, stretch=False, anchor=tk.E)
         self.tree.heading('az_in', text='Az in')
         
-        self.tree.column('az_out', width=50, stretch=False)
+        self.tree.column('az_out', width=40, stretch=False, anchor=tk.E)
         self.tree.heading('az_out', text='Az out')
         
-        self.tree.column('el_max', width=50, stretch=False)
+        self.tree.column('el_max', width=40, stretch=False, anchor=tk.E)
         self.tree.heading('el_max', text='El')        
         
         self.tree.pack(expand=True)
         
     
-    def calculate(self, satellites, location):
+    def redraw(self):
         '''
         Takes a collection of satellite entries and a Location object
-        '''
-        self.tree.delete(0, tk.END)
+        '''        
+        self.tree.delete(*self.tree.get_children())
         
-        obs = create_observer(location)
+        obs = create_observer(self.location)
         
-        for sat in satellites:
+        for sat in self.satellites:
             body = create_body(sat)
+            info = obs.next_pass(body)
+            rise_time = list(map(round, info[0].tuple()[3:]))
+            rise_az = round(info[1] * 180 / ephem.pi)
+            max_el = round(info[3] * 180 / ephem.pi)
+            set_az = round(info[5] * 180 / ephem.pi)
+            time_str = '{0[0]:02d}:{0[1]:02d}'.format(rise_time)
+            
+            self.tree.insert('', tk.END, text=sat, values=(time_str, rise_az, set_az, max_el))
             

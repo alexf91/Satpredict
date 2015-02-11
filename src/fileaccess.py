@@ -157,7 +157,11 @@ class SatelliteEntry(object):
 
 
     def __str__(self):
-        return '{}\n{}'.format(self.scn, self.name)
+        if self.nick != '':
+            text = '{} ({})'.format(self.name, self.nick)
+        else:
+            text = self.name
+        return text
     
     
     def __dict__(self):
