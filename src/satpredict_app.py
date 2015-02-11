@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import ttk
 import os
 import subprocess
 import fileaccess
@@ -50,27 +51,31 @@ class SatPredictApp(tk.Tk):
         
         
     def initialize_gui(self):
-        self.polar = PolarMap(self)
         
-        self.polar.bind('<Up>', lambda e: self.frequency_changed_cb('UP'))
-        self.polar.bind('<Down>', lambda e: self.frequency_changed_cb('DOWN'))
-        self.polar.bind('<KeyPress-BackSpace>', lambda e: self.ptt_cb(True))
-        self.polar.bind('<KeyRelease-BackSpace>', lambda e: self.ptt_cb(False))
+        self.frames = { }
+        self.active_frame = None
         
-        self.polar.grid(column=0, row=0)
-        self.polar.focus()
+        polar = PolarMap(self)
+        self.frames['polar'] = polar
         
-        self.future_passes = FuturePasses(self)
-        self.future_passes.grid(column=0, row=0, sticky=tk.NW + tk.SE)
-        self.future_passes.lower(self.polar)
-        #self.future_passes.focus()
+        polar.bind('<Up>', lambda e: self.frequency_changed_cb('UP'))
+        polar.bind('<Down>', lambda e: self.frequency_changed_cb('DOWN'))
+        polar.bind('<KeyPress-BackSpace>', lambda e: self.ptt_cb(True))
+        polar.bind('<KeyRelease-BackSpace>', lambda e: self.ptt_cb(False))
         
+        polar.grid(column=0, row=0)
+        polar.focus()
+        
+        
+        next_passes = NextPasses(self)
+        self.frames['next'] = next_passes
+        next_passes.grid(column=0, row=0, sticky=tk.NW + tk.SE)
+        
+                
         
         menubar = tk.Menu(self, activebackground='#F00000')
         
         track_menu = tk.Menu(menubar, tearoff=0, activebackground='#F00000')
-        track_menu.add_command(label='Satellite Info')
-        track_menu.add_separator()
         
         self.sat_menu = tk.Menu(track_menu, activebackground='#F00000', tearoff=0, postcommand=self.satellite_dir_cb)
         track_menu.add_cascade(label='Satellite', menu=self.sat_menu)
@@ -93,6 +98,11 @@ class SatPredictApp(tk.Tk):
         self.device_menu.add_command(label='Enable Compass', command=self.compass_cb, state=state)
         menubar.add_cascade(label='Devices', menu=self.device_menu)
         
+        self.view_menu = tk.Menu(menubar, tearoff=0, activebackground='#F00000')
+        self.view_menu.add_command(label='Polar Map', command=lambda: self.set_active_layer('polar'))
+        self.view_menu.add_command(label='Next Events', command=lambda: self.set_active_layer('next'))
+        menubar.add_cascade(label='View', menu=self.view_menu)
+        
         self.settings_menu = tk.Menu(menubar, tearoff=0, activebackground='#F00000')
         self.settings_menu.add_command(label='Update TLE', command=self.update_tle_cb)
         interval_menu_disp = tk.Menu(menubar, tearoff=0, activebackground='#F00000', postcommand=lambda: self.interval_cb('DISPLAY', interval_menu_disp))
@@ -113,7 +123,9 @@ class SatPredictApp(tk.Tk):
         self.grid()
         
         self.bind('<Escape>', lambda e: self.event_generate('<F10>'))
-
+        
+        self.set_active_layer('polar')
+        
     
     def display_timer(self):
         if self.ptt_enabled: # Fix severe interference of TFT display (at least for transmitting)
@@ -122,7 +134,7 @@ class SatPredictApp(tk.Tk):
         
         #Display UTC on screen
         t = time.strftime('%H:%M:%S')
-        self.polar.time.set(t)
+        self.frames['polar'].time.set(t)
         
         #Display satellite name
         if self.active_sat.nick != '':
@@ -130,7 +142,7 @@ class SatPredictApp(tk.Tk):
         else:
             name = self.active_sat.name
         
-        self.polar.sat_name.set(name)
+        self.frames['polar'].sat_name.set(name)
         
         #display transponder name
         if self.active_trsp:
@@ -138,26 +150,26 @@ class SatPredictApp(tk.Tk):
         else:
             name = 'No Transponder'
         
-        self.polar.trsp_name.set(name)
+        self.frames['polar'].trsp_name.set(name)
         
         body = self.calculate_sat_position()
         
         az = math.degrees(body.az)
         el = math.degrees(body.alt)
-        self.polar.update_satpos(az, el)
+        self.frames['polar'].update_satpos(az, el)
         
         if self.compass:
             try:
                 deg = self.compass.angles()
-                self.polar.update_antpos(deg[0], deg[2])
+                self.frames['polar'].update_antpos(deg[0], deg[2])
             except:
                 self.compass = None
         else:
-            self.polar.update_antpos(0, 90)
+            self.frames['polar'].update_antpos(0, 90)
         
         self.calculate_doppler_shift()
         
-        self.polar.print_trsp(self.up_freq, self.down_freq, self.up_doppler_freq, self.down_doppler_freq)
+        self.frames['polar'].print_trsp(self.up_freq, self.down_freq, self.up_doppler_freq, self.down_doppler_freq)
             
         #periodically check for running rigctld and if 
         tty = os.path.exists('/dev/ttyUSB0')
@@ -187,6 +199,15 @@ class SatPredictApp(tk.Tk):
         else:
             self.rigctld.stop()
             self.rig = None
+
+    
+    def set_active_layer(self, name):
+        self.frames[name].lift(self.active_frame)
+        for f in self.frames.values():
+            f.grid_remove()
+            
+        self.active_frame = self.frames[name]
+        self.active_frame.grid()
     
     
     def calculate_sat_position(self):
@@ -243,8 +264,8 @@ class SatPredictApp(tk.Tk):
     def select_transponder(self, trsp):
         self.active_trsp = trsp;
         if trsp is None:
-            self.polar.up_sat.set('')
-            self.polar.down_sat.set('')
+            self.frames['polar'].up_sat.set('')
+            self.frames['polar'].down_sat.set('')
             
         if isinstance(trsp.up, collections.Sequence):
             if trsp.invert:
@@ -262,7 +283,7 @@ class SatPredictApp(tk.Tk):
             self.down_freq = trsp.down
         
         self.calculate_doppler_shift()
-        self.polar.print_trsp(self.up_freq, self.down_freq, self.up_doppler_freq, self.down_doppler_freq)
+        self.frames['polar'].print_trsp(self.up_freq, self.down_freq, self.up_doppler_freq, self.down_doppler_freq)
         
         if self.rig and trsp:
             self.adjust_frequency(up=True)
@@ -339,7 +360,7 @@ class SatPredictApp(tk.Tk):
                     self.up_freq -= inc
         
         self.calculate_doppler_shift()
-        self.polar.print_trsp(self.up_freq, self.down_freq, self.up_doppler_freq, self.down_doppler_freq)
+        self.frames['polar'].print_trsp(self.up_freq, self.down_freq, self.up_doppler_freq, self.down_doppler_freq)
     
     
     def ptt_cb(self, enable):
@@ -457,7 +478,7 @@ class PolarMap(tk.Frame):
         self.draw_outline()
         self.map.grid(column=0, row=0)
         
-        self.info = tk.Frame(self, width=110)
+        self.info = tk.Frame(self, height=210, width=110)
         
         
         self.sat_name = tk.StringVar(value='')
@@ -507,7 +528,9 @@ class PolarMap(tk.Frame):
         self.label = tk.Label(self.info, textvar=self.time, fg=color, font=font(8))
         self.label.grid(column=0, row=7, sticky=tk.W, columnspan=2)
         
-        self.info.grid(column=1, row=0)
+        self.info.grid(column=1, row=0, sticky=tk.W+tk.E)
+        self.info.grid_propagate(False)
+        self.grid()
         
         #add dot for satellite tracking
         r = 3
@@ -515,7 +538,6 @@ class PolarMap(tk.Frame):
 
         self.sat_dot = self.map.create_oval(105-r, 105-r, 105+r, 105+r, fill='black')
         self.ant_dot = self.map.create_oval(105-r, 105-r, 105+r, 105+r, fill='red')
-        self.grid()
         
         self.__antpos_filter = numpy.zeros((3, len(filter_coeff)))
         self.__antpos_filter_coeff = numpy.matrix(filter_coeff).getT()
@@ -592,13 +614,31 @@ class PolarMap(tk.Frame):
         self.down_doppler.set('{}'.format(down_doppler))
         
 
-class FuturePasses(tk.Frame):
+class NextPasses(tk.Frame):
     def __init__(self, parent):
         tk.Frame.__init__(self, parent)
         self.parent = parent
-        self.listbox = tk.Listbox(self)
-        self.listbox.pack(fill=tk.BOTH, expand=True)
+        self.tree = ttk.Treeview(self)
         
-        self.listbox.insert(tk.END, 'asdf')
+        self.tree['columns'] = ('time', 'az_in', 'az_out', 'el_max')
         
+        self.tree.column('#0', width=100)
+        self.tree.heading('#0', text='Satellite')
         
+        self.tree.column('time', width=70)
+        self.tree.heading('time', text='Time')
+
+        self.tree.column('az_in', width=50, stretch=False)
+        self.tree.heading('az_in', text='Az in')
+        
+        self.tree.column('az_out', width=50, stretch=False)
+        self.tree.heading('az_out', text='Az out')
+        
+        self.tree.column('el_max', width=50, stretch=False)
+        self.tree.heading('el_max', text='El')        
+        
+        self.tree.pack(expand=True)
+        
+    
+    def show(self, satellites):
+        pass
