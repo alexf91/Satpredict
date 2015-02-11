@@ -13,6 +13,39 @@ import sys
 import collections
 import rigctl
 
+def deg_2_dms(deg):
+    d = int(deg)
+    location = (deg % 1) * 60
+    min = int(deg)
+    location = (deg % 1) * 60 
+    sec = deg
+    return (d, min, sec)
+
+
+def create_observer(location):
+    '''
+    Returns observer object for given location
+    '''
+    lon = deg_2_dms(location.long)
+    lat = deg_2_dms(location.lat)
+    obs = ephem.Observer()
+    obs.lon = '{}:{}:{}'.format(lon[0], lon[1], lon[2])
+    obs.lat = '{}:{}:{}'.format(lat[0], lat[1], lat[2])
+    obs.elevation = location.elev
+    obs.pressure = 0
+    
+    return obs
+    
+    
+def create_body(sat):
+    '''
+    Returns body object from given satellite
+    '''
+    body = ephem.readtle(sat.line1, sat.line2, sat.line3)
+    
+    return body
+
+
 class SatPredictApp(tk.Tk):
     
     def __init__(self, parent=None):
@@ -152,7 +185,9 @@ class SatPredictApp(tk.Tk):
         
         self.frames['polar'].trsp_name.set(name)
         
-        body = self.calculate_sat_position()
+        body = create_body(self.active_sat)
+        obs = create_observer(self.active_location)
+        body.compute(obs)
         
         az = math.degrees(body.az)
         el = math.degrees(body.alt)
@@ -210,23 +245,11 @@ class SatPredictApp(tk.Tk):
         self.active_frame.grid()
     
     
-    def calculate_sat_position(self):
-        #Calcualte position of current satellite
-        lon = self.__loc_2_dms(self.active_location.long)
-        lat = self.__loc_2_dms(self.active_location.lat)
-        obs = ephem.Observer()
-        obs.lon = '{}:{}:{}'.format(lon[0], lon[1], lon[2])
-        obs.lat = '{}:{}:{}'.format(lat[0], lat[1], lat[2])
-        obs.elevation = self.active_location.elev
-        obs.pressure = 0
-        
-        body = ephem.readtle(self.active_sat.line1, self.active_sat.line2, self.active_sat.line3)
+    def calculate_doppler_shift(self):
+        body = create_body(self.active_sat)
+        obs = create_observer(self.active_location)
         body.compute(obs)
         
-        return body
-    
-    def calculate_doppler_shift(self):
-        body = self.calculate_sat_position()
         vel = -body.range_velocity * 1.055 # bug in xephem, ugly "fix"
         
         c = 299792458
@@ -461,14 +484,6 @@ class SatPredictApp(tk.Tk):
         else:
             exit()
         
-    def __loc_2_dms(self, location):
-        d = int(location)
-        location = (location % 1) * 60
-        min = int(location)
-        location = (location % 1) * 60 
-        sec = location
-        return (d, min, sec)
-        
         
 class PolarMap(tk.Frame):    
     def __init__(self, parent, filter_coeff=[0.4, 0.3, 0.2, 0.1]):
@@ -641,5 +656,14 @@ class NextPasses(tk.Frame):
         self.tree.pack(expand=True)
         
     
-    def show(self, satellites):
-        pass
+    def calculate(self, satellites, location):
+        '''
+        Takes a collection of satellite entries and a Location object
+        '''
+        self.tree.delete(0, tk.END)
+        
+        obs = create_observer(location)
+        
+        for sat in satellites:
+            body = create_body(sat)
+            
