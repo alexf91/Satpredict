@@ -633,10 +633,17 @@ class PolarMap(tk.Frame):
         up_doppler = up_doppler / 1000 if up_doppler else None
         down_doppler = down_doppler / 1000 if down_doppler else None
         
-        self.up_sat.set('{}'.format(up))
-        self.down_sat.set('{}'.format(down))
-        self.up_doppler.set('{}'.format(up_doppler))
-        self.down_doppler.set('{}'.format(down_doppler))
+        def format_string(f):
+            if isinstance(f, float):
+                return '{:10.03f}'.format(f)
+            else:
+                return '{}'.format(f)
+            
+        
+        self.up_sat.set(format_string(up))
+        self.down_sat.set(format_string(down))
+        self.up_doppler.set(format_string(up_doppler))
+        self.down_doppler.set(format_string(down_doppler))
         
 
 class NextPasses(tk.Frame):
@@ -658,10 +665,10 @@ class NextPasses(tk.Frame):
         self.tree.heading('time', text='Time')
 
         self.tree.column('az_in', width=40, stretch=False, anchor=tk.E)
-        self.tree.heading('az_in', text='Az in')
+        self.tree.heading('az_in', text='Az r')
         
         self.tree.column('az_out', width=40, stretch=False, anchor=tk.E)
-        self.tree.heading('az_out', text='Az out')
+        self.tree.heading('az_out', text='Az s')
         
         self.tree.column('el_max', width=40, stretch=False, anchor=tk.E)
         self.tree.heading('el_max', text='El')        

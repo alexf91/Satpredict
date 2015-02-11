@@ -25,13 +25,14 @@ def main():
     
     app = SatPredictApp()
     app.title('SatPredict by OE5TKM')
-    app.resizable(False, False)
-    app.geometry('320x210')
     
     if 'RASPBERRY_PI' in os.environ:
         app.update()
+        app.attributes('-fullscreen', True)
         subprocess.call(['xwit', '-warp', '0', '0'])
         subprocess.call(['xset', 'r', 'off'])
+    else:
+        app.resizable(False, False)
         
     app.mainloop()
 
