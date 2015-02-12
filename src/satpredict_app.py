@@ -251,6 +251,7 @@ class SatPredictApp(tk.Tk):
             
         self.active_frame = self.frames[name]
         self.active_frame.grid()
+        self.active_frame.focus()
         
         try:
             self.active_frame.redraw()
